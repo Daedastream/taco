@@ -1,0 +1,680 @@
+#!/opt/homebrew/bin/bash
+# TACO - Tmux Agent Command Orchestrator
+# Main executable that loads all modules
+
+# Find the installation directory
+if [ -L "$0" ]; then
+    # Follow symlink
+    TACO_HOME=$(dirname "$(readlink -f "$0")")/../
+else
+    TACO_HOME=$(dirname "$0")/../
+fi
+
+# Source all modules
+source "$TACO_HOME/lib/taco-common.sh"
+source "$TACO_HOME/lib/taco-pane-manager.sh"
+source "$TACO_HOME/lib/taco-registry.sh"
+source "$TACO_HOME/lib/taco-messaging.sh"
+source "$TACO_HOME/lib/taco-testing.sh"
+source "$TACO_HOME/lib/taco-monitoring.sh"
+source "$TACO_HOME/lib/taco-docker.sh"
+source "$TACO_HOME/lib/taco-agents.sh"
+
+# Main execution starts here
+main() {
+    # Show version banner
+    show_version
+    
+    # Check for command line arguments
+    PROMPT_FILE=""
+    SKIP_INTERACTIVE=false
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -f|--file)
+                PROMPT_FILE="$2"
+                SKIP_INTERACTIVE=true
+                shift 2
+                ;;
+            -p|--prompt)
+                user_prompt="$2"
+                SKIP_INTERACTIVE=true
+                shift 2
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            -v|--version)
+                show_version
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Unknown option: $1${NC}"
+                echo "Use -h or --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Run safety check
+    check_critical_processes
+    
+    # Get project description
+    if [ "$SKIP_INTERACTIVE" = false ]; then
+        echo -e "${CYAN}🎯 PROJECT SETUP${NC}"
+        echo
+        echo -e "${YELLOW}What would you like to build?${NC}"
+        echo -e "${CYAN}💡 You can provide a detailed description. Press Enter on empty line to finish.${NC}"
+        echo -e "${CYAN}💡 Or type a single line and press Enter.${NC}"
+        echo -e "${CYAN}💡 Or type 'file:' followed by a path to load from file.${NC}"
+        echo
+        
+        user_prompt=$(read_multiline_input)
+    elif [ -n "$PROMPT_FILE" ]; then
+        # Load from file specified via command line
+        if [ -f "$PROMPT_FILE" ]; then
+            echo -e "${CYAN}📄 Loading project description from: $PROMPT_FILE${NC}"
+            user_prompt=$(cat "$PROMPT_FILE")
+            echo -e "${GREEN}✅ Loaded $(echo "$user_prompt" | wc -l) lines from file${NC}"
+        else
+            echo -e "${RED}❌ File not found: $PROMPT_FILE${NC}"
+            exit 1
+        fi
+    elif [ -n "$user_prompt" ]; then
+        # Prompt provided via command line
+        echo -e "${CYAN}📋 Using provided project description${NC}"
+    fi
+    
+    # Check if user wants to load from file (interactive mode only)
+    if [ "$SKIP_INTERACTIVE" = false ] && [[ "$user_prompt" =~ ^file:(.+)$ ]]; then
+        file_path="${BASH_REMATCH[1]}"
+        file_path="${file_path# }"  # Remove leading space
+        
+        if [ -f "$file_path" ]; then
+            echo -e "${CYAN}📄 Loading from file: $file_path${NC}"
+            user_prompt=$(cat "$file_path")
+            echo -e "${GREEN}✅ Loaded $(echo "$user_prompt" | wc -l) lines from file${NC}"
+        else
+            echo -e "${RED}❌ File not found: $file_path${NC}"
+            echo -e "${YELLOW}Let's try again...${NC}"
+            echo
+            user_prompt=$(read_multiline_input)
+        fi
+    fi
+    
+    if [ -z "$user_prompt" ]; then
+        echo -e "${RED}❌ No project description provided. Exiting.${NC}"
+        exit 1
+    fi
+    
+    # Show confirmation of the input (interactive mode only)
+    if [ "$SKIP_INTERACTIVE" = false ]; then
+        echo
+        echo -e "${CYAN}📋 Project Description:${NC}"
+        line_count=$(echo "$user_prompt" | wc -l)
+        char_count=$(echo "$user_prompt" | wc -c)
+        
+        if [ $line_count -gt 10 ] || [ $char_count -gt 500 ]; then
+            echo -e "${YELLOW}   📊 Large input detected: $line_count lines, $char_count characters${NC}"
+            echo -e "${YELLOW}   First 10 lines preview:${NC}"
+            echo "$user_prompt" | head -10 | sed 's/^/   /'
+            [ $line_count -gt 10 ] && echo -e "${YELLOW}   ... (and $((line_count - 10)) more lines)${NC}"
+        else
+            echo "$user_prompt" | sed 's/^/   /'
+        fi
+        
+        echo
+        echo -e "${YELLOW}Is this correct? (Y/n/v to view full text):${NC}"
+        read -r -p "> " confirm_prompt
+        
+        case "$confirm_prompt" in
+            [Vv]*)
+                echo
+                echo -e "${CYAN}📋 Full Project Description:${NC}"
+                echo "$user_prompt" | sed 's/^/   /'
+                echo
+                echo -e "${YELLOW}Is this correct? (Y/n):${NC}"
+                read -r -p "> " confirm_prompt
+                ;;
+        esac
+        
+        if [[ "$confirm_prompt" =~ ^[Nn]$ ]]; then
+            echo -e "${YELLOW}Let's try again...${NC}"
+            echo
+            user_prompt=$(read_multiline_input)
+            
+            # Check for file input again
+            if [[ "$user_prompt" =~ ^file:(.+)$ ]]; then
+                file_path="${BASH_REMATCH[1]}"
+                file_path="${file_path# }"
+                
+                if [ -f "$file_path" ]; then
+                    echo -e "${CYAN}📄 Loading from file: $file_path${NC}"
+                    user_prompt=$(cat "$file_path")
+                    echo -e "${GREEN}✅ Loaded $(echo "$user_prompt" | wc -l) lines from file${NC}"
+                else
+                    echo -e "${RED}❌ File not found: $file_path${NC}"
+                    echo -e "${RED}❌ No project description provided. Exiting.${NC}"
+                    exit 1
+                fi
+            fi
+            
+            if [ -z "$user_prompt" ]; then
+                echo -e "${RED}❌ No project description provided. Exiting.${NC}"
+                exit 1
+            fi
+        fi
+    fi
+    
+    # Configuration with intelligent defaults
+    echo
+    echo -e "${CYAN}🔧 DEVELOPMENT CONFIGURATION${NC}"
+    echo -e "${GREEN}✅ Using optimized defaults for robust development${NC}"
+    echo
+    
+    # Set comprehensive testing as non-negotiable
+    TESTING_STRATEGY="comprehensive"
+    echo -e "${YELLOW}Testing Strategy: ${GREEN}Comprehensive (unit + integration + e2e + api tests)${NC}"
+    
+    # Detect Docker environment and set smart defaults
+    if command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1; then
+        DEPLOYMENT_ENV="docker"
+        echo -e "${YELLOW}Deployment Environment: ${GREEN}Docker containers (auto-detected)${NC}"
+    else
+        DEPLOYMENT_ENV="local"
+        echo -e "${YELLOW}Deployment Environment: ${GREEN}Local development (auto-detected)${NC}"
+    fi
+    
+    # Always use automatic port assignment for simplicity
+    CONNECTION_STRATEGY="automatic"
+    echo -e "${YELLOW}Connection Management: ${GREEN}Automatic port assignment (recommended)${NC}"
+    
+    # Set comprehensive debugging and testing as mandatory
+    ERROR_HANDLING="comprehensive"
+    CURL_TESTING="true"
+    BUILD_VALIDATION="true"
+    LOG_MONITORING="true"
+    
+    echo -e "${YELLOW}Error Handling: ${GREEN}Comprehensive debugging (mandatory)${NC}"
+    echo -e "${YELLOW}Endpoint Testing: ${GREEN}Enabled with curl (mandatory)${NC}"
+    echo -e "${YELLOW}Build Validation: ${GREEN}Enabled (mandatory)${NC}"
+    echo -e "${YELLOW}Log Monitoring: ${GREEN}Enabled (mandatory)${NC}"
+    echo
+    echo -e "${CYAN}💡 All settings optimized for best practices. Manual override available via environment variables.${NC}"
+    
+    # Ask if user wants to create a new folder
+    echo
+    echo -e "${YELLOW}Create project in a new folder? (Y/n)${NC}"
+    read -r -p "> " create_folder
+    
+    if [[ ! "$create_folder" =~ ^[Nn]$ ]]; then
+        echo -e "${YELLOW}Enter folder name (or press Enter for auto-generated):${NC}"
+        read -r -p "> " project_folder
+        
+        if [ -z "$project_folder" ]; then
+            project_folder=$(echo "$user_prompt" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]' | cut -c1-20)
+        fi
+        
+        PROJECT_DIR="$(pwd)/$project_folder-$(date +%Y%m%d-%H%M%S)"
+        mkdir -p "$PROJECT_DIR"
+        cd "$PROJECT_DIR"
+        
+        echo -e "${GREEN}✅ Created project directory: $PROJECT_DIR${NC}"
+    fi
+    
+    # Update orchestrator directory
+    ORCHESTRATOR_DIR="$PROJECT_DIR/.orchestrator"
+    mkdir -p "$ORCHESTRATOR_DIR"
+    
+    # Initialize enhanced components
+    create_connection_registry
+    create_message_relay
+    create_test_coordinator
+    create_connection_validator
+    create_port_helper
+    create_docker_generator
+    create_enhanced_monitor
+    
+    # Initialize logging
+    log "INFO" "ORCHESTRATOR" "Starting TACO session for: $user_prompt"
+    
+    # Ask about agent count
+    echo
+    echo -e "${YELLOW}How many agents should I create? (Enter for auto, or 2-10):${NC}"
+    read -r -p "> " agent_count
+    
+    if [ -n "$agent_count" ] && ! [[ "$agent_count" =~ ^[2-9]$|^10$ ]]; then
+        echo -e "${YELLOW}Invalid count. Using auto mode.${NC}"
+        agent_count="auto"
+    fi
+    
+    # Ask about display mode
+    echo
+    echo -e "${YELLOW}How should agents be displayed?${NC}"
+    echo "1. Separate windows (traditional mode)"
+    echo "2. Single window with panes (up to 4 agents)"
+    read -r -p "Choose option (1-2, default 1): " display_mode
+    
+    DISPLAY_MODE="windows"
+    MAX_PANES=4  # Reduced to prevent "no space for new pane" errors
+    
+    case $display_mode in
+        2)
+            DISPLAY_MODE="panes"
+            echo -e "${GREEN}✓ Using pane mode (max $MAX_PANES agents in panes)${NC}"
+            ;;
+        *)
+            DISPLAY_MODE="windows"
+            echo -e "${GREEN}✓ Using traditional window mode${NC}"
+            ;;
+    esac
+    
+    # Check for existing session
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Found existing TACO session${NC}"
+        echo "1. Kill it and start fresh"
+        echo "2. Exit without changes"
+        read -r -p "Choose option (1-2): " choice
+        
+        case $choice in
+            1)
+                echo -e "${YELLOW}Killing existing session...${NC}"
+                tmux kill-session -t "$SESSION_NAME"
+                ;;
+            *)
+                echo -e "${GREEN}Exiting without changes.${NC}"
+                exit 0
+                ;;
+        esac
+    fi
+    
+    # Create tmux session with Mother in window 0
+    echo -e "${GREEN}🖥️  Creating TACO session...${NC}"
+    tmux new-session -d -s "$SESSION_NAME" -n "mother" -c "$PROJECT_DIR"
+    
+    # Create monitor window (window 1)
+    tmux new-window -t "$SESSION_NAME:1" -n "monitor" -c "$PROJECT_DIR"
+    
+    # Initialize communication files
+    touch "$ORCHESTRATOR_DIR/communication.log"
+    mkdir -p "$ORCHESTRATOR_DIR/messages"
+    
+    # Start enhanced monitor
+    tmux send-keys -t "$SESSION_NAME:1.0" "cd '$PROJECT_DIR' && watch -n 2 '$ORCHESTRATOR_DIR/show_status.sh'" Enter
+    
+    # Start Mother agent
+    log "INFO" "MOTHER" "Starting Mother orchestrator"
+    echo -e "${MAGENTA}👑 Starting Mother Orchestrator...${NC}"
+    
+    # Determine agent count instruction
+    if [ "$agent_count" != "auto" ]; then
+        count_instruction="You should create exactly $agent_count main agents (including tester and devops)."
+    else
+        count_instruction="Decide how many agents are needed (2-10 main agents, must include tester and devops)."
+    fi
+    
+    # Create mother prompt
+    mother_prompt_file="$ORCHESTRATOR_DIR/mother_prompt.txt"
+    create_mother_prompt "$user_prompt" "$agent_count" "$count_instruction" > "$mother_prompt_file"
+    
+    # Launch Mother Claude
+    echo -e "${YELLOW}Starting Claude for Mother...${NC}"
+    tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PROJECT_DIR' && clear" Enter
+    tmux send-keys -t "$SESSION_NAME:0.0" "claude --dangerously-skip-permissions" Enter
+    
+    # Wait for Claude to start
+    echo -e "${YELLOW}Waiting for Claude to initialize...${NC}"
+    sleep 5
+    
+    # Send the mother prompt
+    echo -e "${YELLOW}Sending project requirements to Mother...${NC}"
+    tmux send-keys -t "$SESSION_NAME:0.0" C-u
+    sleep 0.5
+    
+    # Send prompt line by line
+    while IFS= read -r line; do
+        printf '%s\n' "$line" | tmux load-buffer -
+        tmux paste-buffer -t "$SESSION_NAME:0.0"
+        tmux send-keys -t "$SESSION_NAME:0.0" Enter
+    done < "$mother_prompt_file"
+    
+    sleep 0.5
+    tmux send-keys -t "$SESSION_NAME:0.0" Enter
+    
+    # Wait for specification
+    echo -e "${CYAN}Waiting for Mother to output specification...${NC}"
+    sleep 15
+    
+    # Function to check for complete specification
+    check_for_complete_spec() {
+        local capture=$(tmux capture-pane -t "$SESSION_NAME:0.0" -p -S -3000)
+        local clean_capture=$(echo "$capture" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/│//g; s/╰//g; s/─//g; s/╯//g' | sed 's/[[:space:]]*$//')
+        
+        echo "$clean_capture" > "$ORCHESTRATOR_DIR/mother_output_debug.txt"
+        
+        if echo "$clean_capture" | grep -i "AGENT_SPEC_START" && echo "$clean_capture" | grep -i "AGENT_SPEC_END"; then
+            local spec_content=$(echo "$clean_capture" | sed -n '/AGENT_SPEC_START/,/AGENT_SPEC_END/p')
+            if echo "$spec_content" | grep -E "AGENT:[0-9]+:"; then
+                return 0
+            fi
+        fi
+        return 1
+    }
+    
+    # Wait with exponential backoff
+    wait_for_spec_with_backoff() {
+        local wait_time=2
+        local total_wait=0
+        local max_wait=$ORCHESTRATOR_TIMEOUT
+        
+        while [ $total_wait -lt $max_wait ]; do
+            if check_for_complete_spec; then
+                echo -e "${GREEN}✓ Found complete agent specification!${NC}"
+                log "INFO" "MOTHER" "Specification generated successfully"
+                return 0
+            fi
+            
+            echo -ne "\r${CYAN}Waiting for specification... ${total_wait}s${NC}"
+            sleep $wait_time
+            total_wait=$((total_wait + wait_time))
+            wait_time=$((wait_time < 16 ? wait_time * 2 : 16))
+        done
+        
+        echo
+        return 1
+    }
+    
+    if ! wait_for_spec_with_backoff; then
+        log "ERROR" "MOTHER" "Failed to generate specification"
+        echo -e "${RED}❌ Mother failed to generate specification${NC}"
+        exit 1
+    fi
+    
+    # Capture and process specification
+    echo -e "${CYAN}Capturing specification...${NC}"
+    sleep 2
+    spec_file="$ORCHESTRATOR_DIR/agent_spec.txt"
+    tmux capture-pane -t "$SESSION_NAME:0.0" -p -S -3000 > "$spec_file"
+    
+    # Clean and extract specification
+    cleaned_file="$ORCHESTRATOR_DIR/cleaned_spec.txt"
+    sed 's/│//g; s/╰//g; s/─//g; s/╯//g; s/^[[:space:]]*//; s/[[:space:]]*$//' "$spec_file" > "$cleaned_file"
+    
+    # Parse specification with smart window reassignment
+    echo -e "${CYAN}Parsing agent specification...${NC}"
+    IFS=' ' read -ra agent_specs <<< "$(parse_agent_specification "$cleaned_file")"
+    
+    if [ ${#agent_specs[@]} -eq 0 ]; then
+        log "ERROR" "PARSER" "No agents found in specification"
+        echo -e "${RED}❌ Failed to parse agent specification${NC}"
+        exit 1
+    fi
+    
+    # Validate specification quality
+    if ! validate_agent_specification "${agent_specs[@]}"; then
+        exit 1
+    fi
+    
+    echo -e "${GREEN}Creating ${#agent_specs[@]} agents...${NC}"
+    log "INFO" "ORCHESTRATOR" "Creating ${#agent_specs[@]} agents"
+    
+    # Show final agent list
+    echo -e "${CYAN}Final agent assignments:${NC}"
+    for spec in "${agent_specs[@]}"; do
+        IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+        echo "  Window $window_num: $agent_name - $agent_role"
+    done
+    echo
+    
+    # Save state
+    save_state "$user_prompt" "${agent_specs[@]}"
+    
+    # Create agent containers with enhanced robustness
+    create_agent_containers "${agent_specs[@]}"
+    
+    # Initialize all Claude instances with validation
+    echo -e "${CYAN}Initializing Claude instances...${NC}"
+    for idx in "${!agent_specs[@]}"; do
+        spec="${agent_specs[$idx]}"
+        IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+        
+        pane_address=$(get_pane_address $window_num "$agent_name")
+        
+        echo -e "${CYAN}Starting Claude for $agent_name at $pane_address${NC}"
+        log "INFO" "AGENT-$agent_name" "Starting Claude instance at $pane_address"
+        
+        # Validate pane exists and check if Claude is already running
+        if tmux list-panes -t "$pane_address" >/dev/null 2>&1; then
+            # Check if Claude is already running in this pane
+            if tmux capture-pane -t "$pane_address" -p | grep -q "claude"; then
+                log "INFO" "AGENT-$agent_name" "Claude already running in $pane_address, skipping"
+            else
+                tmux send-keys -t "$pane_address" "claude --dangerously-skip-permissions" Enter &
+            fi
+        else
+            log "ERROR" "AGENT-$agent_name" "Cannot start Claude - pane $pane_address not found"
+            echo -e "${RED}❌ Cannot start Claude for $agent_name - pane not found${NC}"
+        fi
+    done
+    wait
+    sleep 5
+    
+    # Send prompts to all agents with enhanced testing focus
+    echo -e "${CYAN}Sending prompts to agents...${NC}"
+    agent_deps=()
+    agent_notifies=()
+    agent_waits=()
+    
+    # Re-read the specification to get dependencies
+    current_agent_idx=-1
+    while IFS= read -r line; do
+        line=$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -z "$line" ] && continue
+        
+        if [[ "$line" =~ ^AGENT:([0-9]+):([^:]+):(.+)$ ]]; then
+            current_agent_idx=$((current_agent_idx + 1))
+        elif [[ "$line" =~ ^DEPENDS_ON:(.+)$ ]] && [ $current_agent_idx -ge 0 ]; then
+            agent_deps[$current_agent_idx]="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^NOTIFIES:(.+)$ ]] && [ $current_agent_idx -ge 0 ]; then
+            agent_notifies[$current_agent_idx]="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^WAIT_FOR:(.+)$ ]] && [ $current_agent_idx -ge 0 ]; then
+            agent_waits[$current_agent_idx]="${BASH_REMATCH[1]}"
+        fi
+    done < <(awk '/AGENT_SPEC_START/,/AGENT_SPEC_END/' "$cleaned_file")
+    
+    for idx in "${!agent_specs[@]}"; do
+        spec="${agent_specs[$idx]}"
+        IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+        depends_on="${agent_deps[$idx]:-none}"
+        notifies="${agent_notifies[$idx]:-none}"
+        wait_for="${agent_waits[$idx]:-none}"
+        
+        echo -e "${CYAN}Configuring $agent_name...${NC}"
+        log "INFO" "AGENT-$agent_name" "Sending initial prompt"
+        
+        # Store agent information for validation
+        agent_roles[$window_num]="$agent_role"
+        agent_addresses[$window_num]="$pane_address"
+        
+        # Create agent prompt with testing focus
+        agent_prompt=$(create_agent_prompt "$window_num" "$agent_name" "$agent_role" "$depends_on" "$notifies" "$wait_for" "${agent_specs[@]}")
+        
+        pane_address=$(get_pane_address $window_num "$agent_name")
+        
+        echo -e "${CYAN}Sending prompt to $agent_name at $pane_address${NC}"
+        log "INFO" "AGENT-$agent_name" "Sending prompt to $pane_address"
+        
+        # Validate pane exists before sending prompt
+        if tmux list-panes -t "$pane_address" >/dev/null 2>&1; then
+            echo "$agent_prompt" | while IFS= read -r line; do
+                printf '%s\n' "$line" | tmux load-buffer -
+                tmux paste-buffer -t "$pane_address"
+                tmux send-keys -t "$pane_address" Enter
+            done
+            tmux send-keys -t "$pane_address" Enter
+        else
+            log "ERROR" "AGENT-$agent_name" "Cannot send prompt - pane $pane_address not found"
+            echo -e "${RED}❌ Cannot send prompt to $agent_name - pane not found${NC}"
+        fi
+        
+        echo "[SYSTEM]: Created $agent_name in window $window_num" >> "$ORCHESTRATOR_DIR/communication.log"
+    done
+    
+    echo -e "${GREEN}✅ All agents created successfully!${NC}"
+    log "INFO" "ORCHESTRATOR" "All agents initialized successfully"
+    
+    # Notify Mother that all agents are ready with enhanced instructions
+    sleep 3
+    echo -e "${CYAN}Notifying Mother that all agents are ready...${NC}"
+    
+    mother_complete_msg="
+
+=== ALL AGENTS CREATED AND READY ===
+
+The following agents are now active and waiting for instructions:
+"
+    
+    for idx in "${!agent_specs[@]}"; do
+        spec="${agent_specs[$idx]}"
+        IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+        mother_complete_msg+="Window $window_num: $agent_name - $agent_role
+"
+    done
+    
+    mother_complete_msg+="
+
+CRITICAL - YOU MUST NOW EXECUTE THESE TASKS:
+
+1. Create workspace directories:
+   mkdir -p frontend backend database testing infrastructure docker
+
+2. Initialize the connection registry for all agents
+
+3. Send DETAILED instructions to each agent including:
+   - Their workspace assignment
+   - Specific tasks with test requirements
+   - Port assignments (avoid conflicts)
+   - Connection details they need
+
+EXAMPLE COMMANDS (adapt based on your agents and configuration):
+
+For frontend agent:
+tmux send-keys -t taco:2.0 \"Your workspace is \$PROJECT_DIR/frontend. Create frontend components with: $testing_requirements. $deployment_guidance. $connection_strategy\"
+tmux send-keys -t taco:2.0 Enter
+
+For backend agent:
+tmux send-keys -t taco:2.1 \"Your workspace is \$PROJECT_DIR/backend. Create backend services with: $testing_requirements. $deployment_guidance. Register endpoints in connection registry. $connection_strategy\"
+tmux send-keys -t taco:2.1 Enter
+
+For tester agent:
+tmux send-keys -t taco:2.3 \"Your workspace is \$PROJECT_DIR/testing. Execute: $testing_requirements. $([ "$CURL_TESTING" = "true" ] && echo "Test all endpoints with curl." || echo "Test endpoints as configured.") Report failures immediately.\"
+tmux send-keys -t taco:2.3 Enter
+
+MANDATORY REQUIREMENTS (NON-NEGOTIABLE):
+- Testing Strategy: $testing_requirements
+- Deployment: $deployment_guidance  
+- Connections: $connection_strategy
+- Test ALL endpoints with curl before marking complete
+- ALL builds must succeed without errors before proceeding
+- Enable comprehensive logging and monitoring
+- ALL errors must be caught, logged, and immediately fixed
+- NO code can be marked complete without passing all tests
+
+Connection Registry: $ORCHESTRATOR_DIR/connections.json
+Message Relay: $ORCHESTRATOR_DIR/message_relay.sh
+Test Coordinator: $ORCHESTRATOR_DIR/test_coordinator.sh
+Validation Script: $ORCHESTRATOR_DIR/validate_connections.sh
+Port Helper: $ORCHESTRATOR_DIR/port_helper.sh
+
+PORT COMMUNICATION PROTOCOL:
+1. All agents MUST use port_helper.sh to allocate ports
+2. All agents MUST update the connection registry when starting services
+3. All agents MUST check the registry before making connections
+4. All agents MUST notify others when ports change
+5. Use 'jq' to read from the registry: jq -r '.services.SERVICE_NAME' $ORCHESTRATOR_DIR/connections.json
+
+BEGIN COORDINATING THE PROJECT NOW!"
+    
+    printf '%s' "$mother_complete_msg" | tmux load-buffer -
+    tmux paste-buffer -t "$SESSION_NAME:0.0"
+    
+    sleep 0.5
+    tmux send-keys -t "$SESSION_NAME:0.0" Enter
+    
+    # Start test monitor in background
+    tmux new-window -t "$SESSION_NAME:2" -n "test-monitor" -c "$PROJECT_DIR"
+    tmux send-keys -t "$SESSION_NAME:2.0" "$ORCHESTRATOR_DIR/test_coordinator.sh monitor" Enter
+    
+    # Display final status
+    clear
+    echo -e "${GREEN}✅ TACO FULLY INITIALIZED!${NC}"
+    echo
+    echo -e "${MAGENTA}Project: $user_prompt${NC}"
+    echo -e "${CYAN}Project Directory: $PROJECT_DIR${NC}"
+    echo -e "${CYAN}Session: $SESSION_NAME${NC}"
+    echo
+    echo -e "${YELLOW}Display Mode: ${DISPLAY_MODE}${NC}"
+    echo
+    echo -e "${YELLOW}Created Agents:${NC}"
+    for idx in "${!agent_specs[@]}"; do
+        spec="${agent_specs[$idx]}"
+        IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+        if [ "$DISPLAY_MODE" = "panes" ] && [ $window_num -gt 1 ]; then
+            pane_idx=$((window_num - 2))
+            echo "  Window 2, Pane $pane_idx: $agent_name"
+        else
+            echo "  Window $window_num: $agent_name"
+        fi
+    done
+    echo
+    echo -e "${YELLOW}Configuration:${NC}"
+    echo "  • Testing Strategy: $TESTING_STRATEGY"
+    echo "  • Deployment Environment: $DEPLOYMENT_ENV"
+    echo "  • Connection Management: $CONNECTION_STRATEGY"
+    echo "  • Error Handling: $ERROR_HANDLING"
+    echo "  • Curl Testing: $CURL_TESTING"
+    echo "  • Build Validation: $BUILD_VALIDATION"
+    echo "  • Log Monitoring: $LOG_MONITORING"
+    echo
+    echo -e "${YELLOW}Enhanced Features:${NC}"
+    echo "  • Configurable test coordination and failure routing"
+    echo "  • Dynamic connection registry and validation"
+    echo "  • Intelligent build error detection and recovery"
+    echo "  • Automated endpoint testing (configurable)"
+    echo "  • Smart Docker/localhost conflict detection"
+    echo "  • Reliable agent-to-mother message relay"
+    echo
+    echo -e "${YELLOW}Key Files:${NC}"
+    echo "  • Connection Registry: $ORCHESTRATOR_DIR/connections.json"
+    echo "  • Message Relay: $ORCHESTRATOR_DIR/message_relay.sh"
+    echo "  • Port Helper: $ORCHESTRATOR_DIR/port_helper.sh"
+    echo "  • Test Results: $ORCHESTRATOR_DIR/test_results.log"
+    echo "  • Validation Log: $ORCHESTRATOR_DIR/validation.log"
+    echo
+    echo -e "${YELLOW}Navigation:${NC}"
+    if [ "$DISPLAY_MODE" = "panes" ]; then
+        echo "  • Ctrl+b + 2: Jump to agents window"
+        echo "  • Ctrl+b + arrow keys: Navigate between panes"
+    else
+        echo "  • Ctrl+b + [0-9]: Jump to specific window"
+    fi
+    echo "  • Ctrl+b + 2: Test monitor window"
+    echo "  • Ctrl+b + d: Detach (everything keeps running)"
+    echo
+    echo -e "${GREEN}🌮 Attaching to TACO session in 3 seconds...${NC}"
+    echo -e "${CYAN}You'll start in the Mother window (0)${NC}"
+    
+    sleep 3
+    
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        tmux attach -t "$SESSION_NAME:0"
+    else
+        echo -e "${RED}❌ Failed to create TACO session${NC}"
+        echo -e "${YELLOW}Check logs at: $ORCHESTRATOR_DIR/orchestrator.log${NC}"
+        exit 1
+    fi
+}
+
+# Run main function
+main "$@"
