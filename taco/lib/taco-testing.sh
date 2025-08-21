@@ -49,14 +49,17 @@ notify_test_failures() {
         # Determine which agent should fix based on failure type
         if echo "$failures" | grep -q "frontend\|component\|ui"; then
             tmux send-keys -t taco:2.0 "TEST FAILURES DETECTED: $failures"
+            sleep 0.2
             tmux send-keys -t taco:2.0 Enter
         fi
         if echo "$failures" | grep -q "backend\|api\|endpoint"; then
             tmux send-keys -t taco:2.1 "TEST FAILURES DETECTED: $failures"
+            sleep 0.2
             tmux send-keys -t taco:2.1 Enter
         fi
         if echo "$failures" | grep -q "database\|schema\|migration"; then
             tmux send-keys -t taco:2.2 "TEST FAILURES DETECTED: $failures"
+            sleep 0.2
             tmux send-keys -t taco:2.2 Enter
         fi
     fi

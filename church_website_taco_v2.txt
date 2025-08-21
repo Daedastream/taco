@@ -1,0 +1,203 @@
+🌮 TIER-1 CHURCH WEBSITE PROJECT - TACO v2.0 SPECIFICATION 🌮
+
+PROJECT DESCRIPTION:
+Build a modern, accessible church website with full content management, giving platform, livestreaming, and admin panel. Target WCAG 2.1 AA compliance and Lighthouse scores ≥95 for SEO/Accessibility.
+
+TECH STACK:
+- Frontend: Next.js 14 (App Router) + TypeScript
+- Styling: Tailwind CSS + shadcn/ui components
+- Database: Prisma ORM with SQLite (dev) → PostgreSQL (prod)
+- Authentication: NextAuth.js with role-based access
+- Payments: Stripe (test mode for development)
+- Email: Resend API
+- Analytics: Google Analytics 4
+- Media: Local storage with S3-ready abstraction
+
+AGENT_SPEC_START
+AGENT:3:scaffold_engineer:Setup Next.js 14 project with TypeScript, Tailwind CSS, shadcn/ui, ESLint, Prettier, project structure, env vars template:claude
+DEPENDS_ON:none
+NOTIFIES:database_engineer,frontend_engineer
+WAIT_FOR:none
+MEMORY_SHARE:all
+PARALLEL_WITH:none
+SUB_AGENTS:nextjs-expert,tailwind-specialist,tooling-expert
+THINKING_MODE:think
+
+AGENT:4:database_engineer:Design Prisma schema (User, Campus, Sermon, Event, Fund, Donation, FormSubmission), create migrations, implement NextAuth with roles (ADMIN/STAFF/VOLUNTEER/VIEWER), build seed script with demo data:claude
+DEPENDS_ON:scaffold_engineer
+NOTIFIES:frontend_engineer,admin_engineer,integration_engineer
+WAIT_FOR:scaffold_complete
+MEMORY_SHARE:all
+PARALLEL_WITH:none
+SUB_AGENTS:prisma-expert,auth-specialist,seed-data-creator
+THINKING_MODE:think_hard
+MEMORY_KEYS:schema,models,auth_roles
+
+AGENT:5:frontend_engineer:Build public pages (home, about, plan-a-visit, sermons, events, give, watch, contact, prayer) with SEO, forms validation using zod + react-hook-form, responsive design:claude
+DEPENDS_ON:scaffold_engineer,database_engineer
+NOTIFIES:testing_engineer,qa_engineer
+WAIT_FOR:database_schema_ready
+MEMORY_SHARE:admin_engineer,testing_engineer
+PARALLEL_WITH:admin_engineer
+SUB_AGENTS:react-expert,seo-specialist,forms-expert,accessibility-expert
+THINKING_MODE:think
+MEMORY_KEYS:api_endpoints,page_routes,form_schemas
+
+AGENT:6:admin_engineer:Create admin dashboard at /admin with CRUD for sermons, events, pages, forms inbox, donations, site settings, implement role-based access control:claude
+DEPENDS_ON:database_engineer
+NOTIFIES:testing_engineer,qa_engineer
+WAIT_FOR:database_schema_ready
+MEMORY_SHARE:frontend_engineer,testing_engineer
+PARALLEL_WITH:frontend_engineer
+SUB_AGENTS:dashboard-expert,crud-specialist,rbac-expert
+THINKING_MODE:think
+MEMORY_KEYS:admin_routes,permissions,crud_endpoints
+
+AGENT:7:integration_engineer:Implement Stripe checkout and webhooks, Resend email for forms/receipts, GA4 tracking, media upload system, rate limiting, ICS calendar generation for events:claude
+DEPENDS_ON:database_engineer
+NOTIFIES:testing_engineer
+WAIT_FOR:frontend_api_ready,admin_api_ready
+MEMORY_SHARE:all
+PARALLEL_WITH:none
+SUB_AGENTS:stripe-expert,email-specialist,analytics-expert,media-handler
+THINKING_MODE:think_hard
+MEMORY_KEYS:stripe_keys,email_templates,webhook_endpoints
+
+AGENT:8:testing_engineer:Write unit tests for forms/API/auth, integration tests for filters/exports/donations, E2E tests with Playwright, validate all endpoints with curl, run Lighthouse audits:claude
+DEPENDS_ON:frontend_engineer,admin_engineer,integration_engineer
+NOTIFIES:qa_engineer
+WAIT_FOR:all_features_complete
+MEMORY_SHARE:all
+PARALLEL_WITH:none
+SUB_AGENTS:unit-tester,integration-tester,e2e-specialist,performance-auditor
+THINKING_MODE:think
+MEMORY_KEYS:test_results,coverage_report,lighthouse_scores
+
+AGENT:9:qa_engineer:Review design consistency, test responsive breakpoints, verify WCAG compliance, validate seed data display, compile comprehensive README with setup/deployment instructions:claude
+DEPENDS_ON:testing_engineer
+NOTIFIES:none
+WAIT_FOR:all_tests_passing
+MEMORY_SHARE:all
+PARALLEL_WITH:none
+SUB_AGENTS:accessibility-auditor,documentation-writer,deployment-expert
+THINKING_MODE:think
+MEMORY_KEYS:qa_checklist,deployment_guide,final_report
+AGENT_SPEC_END
+
+CLAUDE MEMORY INITIALIZATION:
+/memory add project_name "Church Website"
+/memory add tech_stack "Next.js 14, TypeScript, Prisma, NextAuth, Stripe"
+/memory add port_frontend "3000"
+/memory add port_database "5432"
+/memory add test_coverage_target "80"
+/memory add lighthouse_target "95"
+/memory add wcag_level "AA"
+
+MCP SERVERS TO ENABLE:
+- filesystem: Direct file operations
+- git: Version control without bash
+- postgres: Database operations
+- docker: Container management (if needed)
+
+HOOKS CONFIGURATION:
+PRE_TASK:
+- auto-assign.sh: Assign sub-agents based on file types
+- dependency-check.sh: Verify prerequisites before starting
+
+POST_TASK:
+- test-runner.sh: Run tests after each feature
+- lint-check.sh: Ensure code quality
+- commit-changes.sh: Auto-commit completed features
+
+ERROR_HOOKS:
+- auto-recovery.sh: Fix common errors automatically
+- rollback.sh: Revert breaking changes
+
+TESTING REQUIREMENTS:
+- Unit tests: Form validation, API routes, role-based access
+- Integration tests: Sermon filters, event exports, Stripe flow
+- E2E tests: Critical user journeys (visit planning, donations, form submissions)
+- Performance: Lighthouse scores ≥95 for SEO and Accessibility
+- All endpoints validated with curl before marking complete
+- Test coverage ≥80% enforced
+
+DEPLOYMENT REQUIREMENTS:
+- Complete README with setup instructions
+- .env.example with all required variables documented
+- Database seed script with realistic demo data
+- Docker-ready configuration
+- CI/CD workflow templates (GitHub Actions)
+- Vercel deployment configuration
+
+CONNECTION STRATEGY:
+- Development server: Port 3000
+- Database: Port 5432 (PostgreSQL) or file-based (SQLite)
+- Email service: External (Resend API)
+- Payment processing: External (Stripe API)
+- All services registered in .orchestrator/connections.json
+
+DATA MODEL HIGHLIGHTS:
+- Multi-campus support with service times
+- Sermon series with video/audio/transcript
+- Recurring events with calendar export
+- Multiple giving funds with one-time/recurring donations
+- Form submissions with status tracking
+- Role-based user management
+
+KEY FEATURES WITH SUB-AGENT DELEGATION:
+1. PUBLIC PAGES (frontend_engineer + sub-agents):
+   - Home: Hero, service times, featured sermon, upcoming events, CTAs
+   - About: Beliefs, staff, campus information
+   - Plan a Visit: Capture form with email follow-up
+   - Sermons: Filter by series/speaker/topic/scripture
+   - Events: Calendar view with ICS export
+   - Give: Stripe checkout with fund selection
+   - Watch: Livestream embed with "Live Now" indicator
+   - Contact/Prayer: Separate forms with spam protection
+
+2. ADMIN PANEL (admin_engineer + sub-agents):
+   - Dashboard with metrics and recent activity
+   - Content management for all public pages
+   - Form submission inbox with status tracking
+   - Donation records and reporting
+   - Site-wide settings management
+   - User management with role assignment
+
+3. TECHNICAL REQUIREMENTS (all agents):
+   - Mobile-first responsive design
+   - Server-side rendering for SEO
+   - Progressive enhancement
+   - Secure authentication with sessions
+   - Rate limiting on public endpoints
+   - Honeypot fields for spam prevention
+   - Optimistic UI updates
+   - Real-time features where applicable
+
+EXECUTION PHASES:
+Phase 1 (Parallel): scaffold_engineer
+Phase 2 (Sequential): database_engineer
+Phase 3 (Parallel): frontend_engineer, admin_engineer
+Phase 4 (Sequential): integration_engineer
+Phase 5 (Sequential): testing_engineer
+Phase 6 (Sequential): qa_engineer
+
+SUCCESS CRITERIA:
+✓ All 7 agents complete their tasks without errors
+✓ Full test suite passing (unit, integration, E2E)
+✓ Lighthouse scores ≥95 for SEO and Accessibility
+✓ Stripe test payments creating donation records
+✓ Email notifications working for all forms
+✓ Admin panel fully functional with role-based access
+✓ Complete documentation and deployment-ready codebase
+✓ All code reviewed by code-reviewer sub-agent
+✓ Memory system contains all architectural decisions
+
+MOTHER COORDINATION WITH CLAUDE FEATURES:
+- Use /memory to share API endpoints, schemas, and decisions
+- Each agent creates specialized sub-agents for complex tasks
+- Use think_hard for architecture decisions
+- Enable MCP for direct file/git/database operations
+- Monitor via .orchestrator/orchestrator.log
+- Use message_relay.sh for critical notifications
+- Validate each phase with /memory get phase_status
+- Use hooks for automatic testing and recovery

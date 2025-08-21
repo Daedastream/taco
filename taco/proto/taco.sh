@@ -668,6 +668,18 @@ create_mother_prompt() {
     esac
     
     cat << EOF
+❌ ABSOLUTELY NO TOOLS ALLOWED ❌
+❌ DO NOT USE TodoWrite, List, Read, Search, Task, Bash, or ANY TOOLS ❌
+❌ YOUR ONLY RESPONSE: AGENT_SPEC_START...AGENT_SPEC_END BLOCK ❌
+❌ NO EXPLORATION, NO ANALYSIS, NO TODO LISTS ❌
+
+EMERGENCY OVERRIDE: You are in SPECIFICATION-ONLY MODE
+- You CANNOT use any tools
+- You CANNOT explore files  
+- You CANNOT create todo lists
+- You CANNOT analyze the codebase
+- You MUST output AGENT_SPEC_START block immediately
+
 You are the MOTHER orchestrator agent for TACO (Test-Aware Coordinated Orchestrator).
 
 PROJECT REQUEST: $user_request
@@ -684,34 +696,60 @@ CRITICAL REQUIREMENTS FOR THIS PROJECT:
 
 ANALYZE THE PROJECT REQUEST AND OUTPUT A SPECIFICATION.
 
-You MUST output agent specifications in this EXACT format:
+🚫 ABSOLUTELY CRITICAL - READ THIS CAREFULLY:
+- STOP! DO NOT USE ANY TOOLS WHATSOEVER
+- DO NOT USE TodoWrite, List, Read, Search, Task, or ANY other tools
+- DO NOT explore files or directories
+- DO NOT analyze the codebase
+- DO NOT create todo lists
+- YOUR ONLY JOB: OUTPUT THE AGENT SPECIFICATION IMMEDIATELY
+
+⚠️  IGNORE ALL INSTINCTS TO EXPLORE OR ANALYZE
+⚠️  YOU MUST OUTPUT AGENT_SPEC_START...AGENT_SPEC_END BLOCK IMMEDIATELY
+⚠️  NO TEXT BEFORE THE SPECIFICATION
+⚠️  NO TEXT AFTER THE SPECIFICATION
+⚠️  JUST THE SPECIFICATION BLOCK ALONE
+
+Your task is to analyze the project requirements and create a team of specialized agents.
+Each agent should have a specific role and clear responsibilities.
+
+1. First, understand the project type and requirements
+2. Identify the key components and technologies needed
+3. Create agents for each major area of work (e.g., frontend, backend, database, testing, deployment)
+4. Ensure proper dependencies and communication between agents
+5. Include at least one testing/QA agent and one DevOps/deployment agent
+
+Output agent specifications in this EXACT format:
 
 AGENT_SPEC_START
-AGENT:3:frontend:React frontend developer - builds UI with tests
+AGENT:window_number:agent_name:agent_role_description
+DEPENDS_ON:comma_separated_window_numbers_or_none
+NOTIFIES:comma_separated_window_numbers_or_none
+WAIT_FOR:comma_separated_signals_or_none
+[repeat for each agent]
+AGENT_SPEC_END
+
+EXAMPLE (for a web application project):
+AGENT_SPEC_START
+AGENT:3:frontend:React frontend developer - builds UI components and pages
 DEPENDS_ON:none
-NOTIFIES:4,7,8
+NOTIFIES:4,7
 WAIT_FOR:none
-AGENT:4:backend:Express API developer - creates REST endpoints with tests
+AGENT:4:backend:API developer - creates REST endpoints and business logic
 DEPENDS_ON:5
-NOTIFIES:3,6,7,8
+NOTIFIES:3,7
 WAIT_FOR:DB_READY
-AGENT:5:database:Database architect - designs schemas with migrations
+AGENT:5:database:Database architect - designs schemas and migrations
 DEPENDS_ON:none
 NOTIFIES:4
 WAIT_FOR:none
-AGENT:6:mobile:React Native developer - builds mobile app with tests
-DEPENDS_ON:4
-NOTIFIES:3,7,8
-WAIT_FOR:API_READY
-AGENT:7:tester:QA engineer - runs all tests and validates connections
+AGENT:7:tester:QA engineer - writes and runs tests
 DEPENDS_ON:none
-NOTIFIES:0,3,4,5,6
-WAIT_FOR:UI_READY,API_READY,MOBILE_READY
-AGENT:8:devops:DevOps engineer - manages Docker, ports, and deployments
-DEPENDS_ON:none
-NOTIFIES:0,4,5
-WAIT_FOR:none
+NOTIFIES:0,3,4,5
+WAIT_FOR:API_READY,UI_READY
 AGENT_SPEC_END
+
+IMPORTANT: This is just an example. You must create agents specific to the actual project requirements.
 
 CRITICAL SPECIFICATION RULES:
 - Window 0 is you (Mother), window 1 is monitor, window 2 is test-monitor
@@ -726,6 +764,13 @@ CRITICAL SPECIFICATION RULES:
 - Agent names should clearly reflect their unique function (e.g., 'webui', 'mobileapp', 'apiserver', 'userauth', 'database', 'testing', 'deployment')
 
 AGENT DESIGN PRINCIPLES:
+- Analyze the project type first (web app, CLI tool, library, mobile app, etc.)
+- Identify the technology stack from the request (React, Vue, Express, Django, etc.)
+- Create agents based on the actual components needed, not a fixed template
+- Consider the project complexity when deciding agent count
+- For simple projects: fewer agents with broader responsibilities
+- For complex projects: more specialized agents with focused roles
+- Always include testing and deployment agents, but adapt their roles to the project
 - Divide work by functional boundaries, not arbitrary splits
 - Ensure each agent can work independently on their domain
 - Use DEPENDS_ON and WAIT_FOR to coordinate between agents
@@ -740,7 +785,7 @@ Example:
 tmux send-keys -t taco:3.0 "echo '{\"services\": {\"api\": \"http://localhost:3001\"}, \"ports\": {\"api\": 3001}}' | jq -s '.[0] * .[1]' $PROJECT_DIR/.orchestrator/connections.json - > /tmp/conn.json && mv /tmp/conn.json $PROJECT_DIR/.orchestrator/connections.json"
 tmux send-keys -t taco:3.0 Enter
 
-Now analyze the project and OUTPUT YOUR SPECIFICATION.
+🚨 FINAL WARNING: OUTPUT AGENT_SPEC_START BLOCK NOW! NO TOOLS! NO ANALYSIS! JUST THE SPECIFICATION!
 EOF
 }
 

@@ -3,7 +3,7 @@
 # Common functions and configuration
 
 # Configuration
-export TACO_VERSION="1.0"
+export TACO_VERSION="2.0.0"
 export PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 export ORCHESTRATOR_DIR="$PROJECT_DIR/.orchestrator"
 export SESSION_NAME="${ORCHESTRATOR_SESSION:-taco}"
@@ -13,7 +13,7 @@ export CONFIG_FILE="${HOME}/.orchestrator/config"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 
 # Default configuration values
-export ORCHESTRATOR_TIMEOUT="${ORCHESTRATOR_TIMEOUT:-45}"
+export ORCHESTRATOR_TIMEOUT="${ORCHESTRATOR_TIMEOUT:-90}"
 export ORCHESTRATOR_MAX_RETRIES="${ORCHESTRATOR_MAX_RETRIES:-3}"
 export ORCHESTRATOR_LOG_LEVEL="${ORCHESTRATOR_LOG_LEVEL:-INFO}"
 
@@ -25,6 +25,17 @@ export YELLOW='\033[1;33m'
 export CYAN='\033[0;36m'
 export MAGENTA='\033[0;35m'
 export NC='\033[0m'
+
+# Safe tmux send-keys with delay and Enter
+send_tmux_command() {
+    local target="$1"
+    local command="$2"
+    local delay="${3:-0.1}"
+    
+    tmux send-keys -t "$target" "$command"
+    sleep "$delay"
+    tmux send-keys -t "$target" Enter
+}
 
 # Structured logging function
 log() {
@@ -62,8 +73,8 @@ check_critical_processes() {
         has_critical=true
     fi
 
-    if pgrep -f "claude.*--dangerously-skip" >/dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️  Found running Claude agents${NC}"
+    if pgrep -f "claude.*--dangerously-skip|codex.*--full-auto|gemini.*--yolo|codex|gemini" >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Found running CLI agents (Claude/Codex/Gemini)${NC}"
         has_critical=true
     fi
 
@@ -135,20 +146,72 @@ $line"
 
 # Show usage
 show_usage() {
-    echo -e "${CYAN}Usage: taco [options]${NC}"
-    echo -e "${YELLOW}Options:${NC}"
-    echo "  -f, --file <path>     Load project description from file"
-    echo "  -p, --prompt <text>   Provide project description directly"
-    echo "  -h, --help           Show this help message"
-    echo "  -v, --version        Show version information"
+    echo -e "${CYAN}TACO v2.0.0 - Tmux Agent Command Orchestrator${NC}"
+    echo
+    echo -e "${YELLOW}Usage:${NC} taco [options]"
+    echo
+    echo -e "${GREEN}Core Options:${NC}"
+    echo "  -f, --file <path>       Load project from file"
+    echo "  -p, --prompt <text>     Direct project description"
+    echo "  -h, --help              Show this help"
+    echo "  -v, --version           Show version"
+    echo
+    echo -e "${GREEN}Orchestration:${NC}"
+    echo "  --hybrid                Enable parallel multi-agent execution"
+    echo "  --cache                 Enable prompt caching for efficiency"
+    echo "  --think <mode>          Set thinking mode (think|think_hard|ultrathink)"
+    echo "  --mcp-servers <list>    Enable MCP servers (filesystem,git,postgres,etc)"
+    echo
+    echo -e "${GREEN}Agent Selection:${NC}"
+    echo "  --claude                Use Claude (default)"
+    echo "  --openai                Use OpenAI GPT-4"
+    echo "  --gemini                Use Google Gemini"
+    echo "  --codex                 Use GitHub Copilot (OpenAI Codex)"
+    echo "  --llama                 Use local Llama"
+    echo
+    echo -e "${GREEN}Feature Toggles:${NC}"
+    echo "  --no-mcp                Disable MCP servers"
+    echo "  --no-subagents          Disable Claude sub-agents"
+    echo "  --no-cache              Disable caching"
     echo
     echo -e "${CYAN}Examples:${NC}"
-    echo "  taco -f project_spec.txt"
-    echo "  taco -p \"Build a React app with Express backend\""
+    echo "  taco --hybrid --cache -f spec.txt"
+    echo "  taco --think ultrathink -p \"Complex architecture\""
+    echo "  taco --mcp-servers filesystem,git,postgres -f project.txt"
     echo "  taco  # Interactive mode"
 }
 
 # Show version
 show_version() {
     echo -e "${BLUE}🌮 TACO - Tmux Agent Command Orchestrator v${TACO_VERSION}${NC}"
+}
+
+# Get agent command based on type and flags
+get_agent_command() {
+    local agent_type="${TACO_AGENT_TYPE:-claude}"
+    local agent_flags="${TACO_AGENT_FLAGS:-}"
+    
+    case "$agent_type" in
+        claude)
+            echo "claude --dangerously-skip-permissions"
+            ;;
+        codex)
+            if [ -n "$agent_flags" ]; then
+                echo "codex $agent_flags"
+            else
+                echo "codex"
+            fi
+            ;;
+        gemini)
+            if [ -n "$agent_flags" ]; then
+                echo "gemini $agent_flags"
+            else
+                echo "gemini"
+            fi
+            ;;
+        *)
+            # Default to claude if unknown
+            echo "claude --dangerously-skip-permissions"
+            ;;
+    esac
 }

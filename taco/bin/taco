@@ -19,15 +19,26 @@ source "$TACO_HOME/lib/taco-testing.sh"
 source "$TACO_HOME/lib/taco-monitoring.sh"
 source "$TACO_HOME/lib/taco-docker.sh"
 source "$TACO_HOME/lib/taco-agents.sh"
+# Source new v2.0 modules
+for module in taco-claude-subagents taco-hybrid-mode taco-mcp taco-hooks taco-settings taco-multi-agent taco-orchestration-v2; do
+    if [ -f "$TACO_HOME/lib/${module}.sh" ]; then
+        source "$TACO_HOME/lib/${module}.sh"
+    fi
+done
 
 # Main execution starts here
 main() {
-    # Show version banner
-    show_version
-    
-    # Check for command line arguments
+    # Check for command line arguments first (before loading settings)
     PROMPT_FILE=""
     SKIP_INTERACTIVE=false
+    AGENT_TYPE="${TACO_DEFAULT_AGENT:-claude}"  # Default from settings
+    AGENT_FLAGS=""
+    HYBRID_MODE=false
+    MCP_ENABLED="${TACO_MCP_ENABLED:-true}"
+    SUB_AGENTS_ENABLED="${TACO_SUB_AGENTS_ENABLED:-true}"
+    CACHE_ENABLED=false
+    THINKING_MODE=""
+    MCP_SERVERS=""
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -41,12 +52,94 @@ main() {
                 SKIP_INTERACTIVE=true
                 shift 2
                 ;;
+            --codex)
+                AGENT_TYPE="codex"
+                shift
+                ;;
+            --gemini)
+                AGENT_TYPE="gemini"
+                shift
+                ;;
+            --openai)
+                AGENT_TYPE="openai"
+                shift
+                ;;
+            --anthropic-api)
+                AGENT_TYPE="anthropic_api"
+                shift
+                ;;
+            --llama)
+                AGENT_TYPE="llama"
+                shift
+                ;;
+            --mistral)
+                AGENT_TYPE="mistral"
+                shift
+                ;;
+            --custom)
+                AGENT_TYPE="custom"
+                CUSTOM_CONFIG="$2"
+                shift 2
+                ;;
+            --hybrid)
+                HYBRID_MODE=true
+                shift
+                ;;
+            --cache)
+                CACHE_ENABLED=true
+                shift
+                ;;
+            --think)
+                THINKING_MODE="$2"
+                shift 2
+                ;;
+            --mcp-servers)
+                MCP_SERVERS="$2"
+                shift 2
+                ;;
+            --no-mcp)
+                MCP_ENABLED=false
+                shift
+                ;;
+            --no-subagents)
+                SUB_AGENTS_ENABLED=false
+                shift
+                ;;
+            --no-cache)
+                CACHE_ENABLED=false
+                shift
+                ;;
+            --settings)
+                SETTINGS_FILE="$2"
+                shift 2
+                ;;
+            --think)
+                THINKING_MODE="$2"
+                shift 2
+                ;;
+            --full-auto)
+                if [ "$AGENT_TYPE" = "codex" ]; then
+                    AGENT_FLAGS="--full-auto"
+                else
+                    echo -e "${YELLOW}Warning: --full-auto flag is only for codex agent${NC}"
+                fi
+                shift
+                ;;
+            --yolo)
+                if [ "$AGENT_TYPE" = "gemini" ]; then
+                    AGENT_FLAGS="--yolo"
+                else
+                    echo -e "${YELLOW}Warning: --yolo flag is only for gemini agent${NC}"
+                fi
+                shift
+                ;;
             -h|--help)
                 show_usage
                 exit 0
                 ;;
             -v|--version)
-                show_version
+                echo -e "${BLUE}🌮 TACO v2.0.0${NC}"
+                echo -e "${CYAN}Claude Sub-Agents | MCP | Multi-Model | Hybrid Mode${NC}"
                 exit 0
                 ;;
             *)
@@ -60,8 +153,79 @@ main() {
     # Run safety check
     check_critical_processes
     
+    # Agent selection (only if not skipping interactive mode)
+    if [ "$SKIP_INTERACTIVE" = false ] && [ -z "$AGENT_TYPE" ]; then
+        echo
+        echo -e "${CYAN}🤖 AGENT SELECTION${NC}"
+        echo -e "${YELLOW}Choose your orchestration mode:${NC}"
+        echo "1. Claude with Sub-Agents (recommended)"
+        echo "2. Hybrid Mode (multiple parallel agents)"
+        echo "3. Classic TACO (tmux agents)"
+        echo "4. OpenAI GPT-4"
+        echo "5. Anthropic API"
+        echo "6. Local Llama"
+        echo "7. Codex (full-auto)"
+        echo "8. Gemini (yolo mode)"
+        echo "9. Custom Agent"
+        read -r -p "Choose option (1-9, default 1): " agent_choice
+        
+        case $agent_choice in
+            1)
+                AGENT_TYPE="claude"
+                SUB_AGENTS_ENABLED=true
+                MCP_ENABLED=true
+                ;;
+            2)
+                HYBRID_MODE=true
+                ;;
+            3)
+                AGENT_TYPE="claude"
+                SUB_AGENTS_ENABLED=false
+                MCP_ENABLED=false
+                ;;
+            4)
+                AGENT_TYPE="openai"
+                ;;
+            5)
+                AGENT_TYPE="anthropic_api"
+                ;;
+            6)
+                AGENT_TYPE="llama"
+                ;;
+            7)
+                AGENT_TYPE="codex"
+                AGENT_FLAGS="--full-auto"
+                ;;
+            8)
+                AGENT_TYPE="gemini"
+                AGENT_FLAGS="--yolo"
+                ;;
+            9)
+                AGENT_TYPE="custom"
+                read -r -p "Path to custom agent config: " CUSTOM_CONFIG
+                ;;
+            *)
+                AGENT_TYPE="claude"
+                SUB_AGENTS_ENABLED=true
+                ;;
+        esac
+    fi
+    
+    # Old code removed - now using new agent selection above
+    
+    # Export agent configuration for use in other modules
+    export TACO_AGENT_TYPE="$AGENT_TYPE"
+    export TACO_AGENT_FLAGS="$AGENT_FLAGS"
+    export TACO_HYBRID_MODE="$HYBRID_MODE"
+    export TACO_CACHE_ENABLED="$CACHE_ENABLED"
+    export TACO_THINKING_MODE="$THINKING_MODE"
+    export TACO_MCP_SERVERS="$MCP_SERVERS"
+    export TACO_MCP_ENABLED="$MCP_ENABLED"
+    export TACO_SUB_AGENTS_ENABLED="$SUB_AGENTS_ENABLED"
+    
     # Get project description
     if [ "$SKIP_INTERACTIVE" = false ]; then
+        echo -e "${BLUE}🌮 TACO v2.0.0${NC}"
         echo -e "${CYAN}🎯 PROJECT SETUP${NC}"
         echo
         echo -e "${YELLOW}What would you like to build?${NC}"
@@ -221,6 +385,9 @@ main() {
         cd "$PROJECT_DIR"
         
         echo -e "${GREEN}✅ Created project directory: $PROJECT_DIR${NC}"
+    else
+        # If not creating a new folder, use current directory
+        PROJECT_DIR="$(pwd)"
     fi
     
     # Update orchestrator directory
@@ -296,9 +463,11 @@ main() {
     # Create monitor window (window 1)
     tmux new-window -t "$SESSION_NAME:1" -n "monitor" -c "$PROJECT_DIR"
     
-    # Initialize communication files
+    # Initialize communication files and shared directories
     touch "$ORCHESTRATOR_DIR/communication.log"
     mkdir -p "$ORCHESTRATOR_DIR/messages"
+    mkdir -p "$ORCHESTRATOR_DIR/shared_specs"
+    echo "{}" > "$ORCHESTRATOR_DIR/shared_specs/README.md"
     
     # Start enhanced monitor
     tmux send-keys -t "$SESSION_NAME:1.0" "cd '$PROJECT_DIR' && watch -n 2 '$ORCHESTRATOR_DIR/show_status.sh'" Enter
@@ -318,13 +487,14 @@ main() {
     mother_prompt_file="$ORCHESTRATOR_DIR/mother_prompt.txt"
     create_mother_prompt "$user_prompt" "$agent_count" "$count_instruction" > "$mother_prompt_file"
     
-    # Launch Mother Claude
-    echo -e "${YELLOW}Starting Claude for Mother...${NC}"
+    # Launch Mother Agent
+    agent_cmd=$(get_agent_command)
+    echo -e "${YELLOW}Starting $AGENT_TYPE for Mother...${NC}"
     tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PROJECT_DIR' && clear" Enter
-    tmux send-keys -t "$SESSION_NAME:0.0" "claude --dangerously-skip-permissions" Enter
+    tmux send-keys -t "$SESSION_NAME:0.0" "$agent_cmd" Enter
     
-    # Wait for Claude to start
-    echo -e "${YELLOW}Waiting for Claude to initialize...${NC}"
+    # Wait for agent to start
+    echo -e "${YELLOW}Waiting for $AGENT_TYPE to initialize...${NC}"
     sleep 5
     
     # Send the mother prompt
@@ -344,6 +514,7 @@ main() {
     
     # Wait for specification
     echo -e "${CYAN}Waiting for Mother to output specification...${NC}"
+    echo -e "${YELLOW}Debug: Check $ORCHESTRATOR_DIR/mother_output_debug.txt for Mother's output${NC}"
     sleep 15
     
     # Function to check for complete specification
@@ -353,9 +524,20 @@ main() {
         
         echo "$clean_capture" > "$ORCHESTRATOR_DIR/mother_output_debug.txt"
         
-        if echo "$clean_capture" | grep -i "AGENT_SPEC_START" && echo "$clean_capture" | grep -i "AGENT_SPEC_END"; then
-            local spec_content=$(echo "$clean_capture" | sed -n '/AGENT_SPEC_START/,/AGENT_SPEC_END/p')
-            if echo "$spec_content" | grep -E "AGENT:[0-9]+:"; then
+        # Simply check if we have both START and END markers
+        if echo "$clean_capture" | grep -i "AGENT_SPEC_START" > /dev/null && \
+           echo "$clean_capture" | grep -i "AGENT_SPEC_END" > /dev/null; then
+            
+            # Get the last AGENT_SPEC block (in case there are examples in the prompt)
+            local spec_content=$(echo "$clean_capture" | awk '
+                /AGENT_SPEC_START/ { delete lines; i=0; capturing=1 }
+                capturing { lines[i++] = $0 }
+                /AGENT_SPEC_END/ { capturing=0; for(j=0; j<i; j++) final_lines[j] = lines[j] }
+                END { for(j=0; j in final_lines; j++) print final_lines[j] }
+            ')
+            
+            # Check if we have actual agent definitions
+            if echo "$spec_content" | grep -E "AGENT:[0-9]+:" > /dev/null; then
                 return 0
             fi
         fi
@@ -388,6 +570,10 @@ main() {
     if ! wait_for_spec_with_backoff; then
         log "ERROR" "MOTHER" "Failed to generate specification"
         echo -e "${RED}❌ Mother failed to generate specification${NC}"
+        echo -e "${YELLOW}Debug: Mother's output was captured in:${NC}"
+        echo -e "${YELLOW}  $ORCHESTRATOR_DIR/mother_output_debug.txt${NC}"
+        echo -e "${YELLOW}Debug: Mother's prompt was:${NC}"
+        echo -e "${YELLOW}  $ORCHESTRATOR_DIR/mother_prompt.txt${NC}"
         exit 1
     fi
     
@@ -397,13 +583,30 @@ main() {
     spec_file="$ORCHESTRATOR_DIR/agent_spec.txt"
     tmux capture-pane -t "$SESSION_NAME:0.0" -p -S -3000 > "$spec_file"
     
-    # Clean and extract specification
+    # Clean and extract specification (remove ANSI codes and box drawing characters)
+    # Extract only Mother's actual specification output after PROJECT ANALYSIS
     cleaned_file="$ORCHESTRATOR_DIR/cleaned_spec.txt"
-    sed 's/│//g; s/╰//g; s/─//g; s/╯//g; s/^[[:space:]]*//; s/[[:space:]]*$//' "$spec_file" > "$cleaned_file"
+    
+    # First clean the file, then extract content after PROJECT ANALYSIS or AGENT SPECIFICATION
+    cleaned_content=$(sed 's/\x1b\[[0-9;]*m//g; s/│//g; s/╰//g; s/─//g; s/╯//g; s/^[[:space:]]*//; s/[[:space:]]*$//' "$spec_file")
+    analysis_line=$(echo "$cleaned_content" | grep -n -E "(PROJECT ANALYSIS|AGENT SPECIFICATION)" | tail -1 | cut -d: -f1)
+    
+    if [ -n "$analysis_line" ]; then
+        echo "$cleaned_content" | tail -n +$analysis_line > "$cleaned_file"
+    else
+        echo "$cleaned_content" > "$cleaned_file"
+    fi
     
     # Parse specification with smart window reassignment
     echo -e "${CYAN}Parsing agent specification...${NC}"
-    IFS=' ' read -ra agent_specs <<< "$(parse_agent_specification "$cleaned_file")"
+    agent_specs_file="$ORCHESTRATOR_DIR/parsed_agents.txt"
+    parse_agent_specification "$cleaned_file" "$agent_specs_file"
+    
+    # Read agent specs from file
+    agent_specs=()
+    while IFS= read -r spec; do
+        [ -n "$spec" ] && agent_specs+=("$spec")
+    done < "$agent_specs_file"
     
     if [ ${#agent_specs[@]} -eq 0 ]; then
         log "ERROR" "PARSER" "No agents found in specification"
@@ -413,10 +616,16 @@ main() {
     
     # Validate specification quality
     if ! validate_agent_specification "${agent_specs[@]}"; then
+        echo -e "${RED}❌ Agent specification validation failed${NC}"
         exit 1
     fi
     
     echo -e "${GREEN}Creating ${#agent_specs[@]} agents...${NC}"
+    echo -e "${CYAN}Parsed agents:${NC}"
+    for spec in "${agent_specs[@]}"; do
+        IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+        echo -e "  ${YELLOW}Window $window_num: ${GREEN}$agent_name${NC} - $agent_role"
+    done
     log "INFO" "ORCHESTRATOR" "Creating ${#agent_specs[@]} agents"
     
     # Show final agent list
@@ -433,31 +642,38 @@ main() {
     # Create agent containers with enhanced robustness
     create_agent_containers "${agent_specs[@]}"
     
-    # Initialize all Claude instances with validation
-    echo -e "${CYAN}Initializing Claude instances...${NC}"
+    # Initialize all agent instances with validation
+    agent_cmd=$(get_agent_command)
+    echo -e "${CYAN}Initializing $AGENT_TYPE instances...${NC}"
     for idx in "${!agent_specs[@]}"; do
         spec="${agent_specs[$idx]}"
         IFS=':' read -r window_num agent_name agent_role <<< "$spec"
         
         pane_address=$(get_pane_address $window_num "$agent_name")
         
-        echo -e "${CYAN}Starting Claude for $agent_name at $pane_address${NC}"
-        log "INFO" "AGENT-$agent_name" "Starting Claude instance at $pane_address"
+        echo -e "${CYAN}Starting $AGENT_TYPE for $agent_name at $pane_address${NC}"
+        log "INFO" "AGENT-$agent_name" "Starting $AGENT_TYPE instance at $pane_address"
         
-        # Validate pane exists and check if Claude is already running
+        # Validate pane exists and check if agent is already running
         if tmux list-panes -t "$pane_address" >/dev/null 2>&1; then
-            # Check if Claude is already running in this pane
-            if tmux capture-pane -t "$pane_address" -p | grep -q "claude"; then
-                log "INFO" "AGENT-$agent_name" "Claude already running in $pane_address, skipping"
+            # Check if agent is already running in this pane (check for any of the agent types)
+            if tmux capture-pane -t "$pane_address" -p | grep -qE "claude|codex|gemini"; then
+                log "INFO" "AGENT-$agent_name" "$AGENT_TYPE already running in $pane_address, skipping"
             else
-                tmux send-keys -t "$pane_address" "claude --dangerously-skip-permissions" Enter &
+                tmux send-keys -t "$pane_address" "$agent_cmd" Enter &
             fi
         else
-            log "ERROR" "AGENT-$agent_name" "Cannot start Claude - pane $pane_address not found"
-            echo -e "${RED}❌ Cannot start Claude for $agent_name - pane not found${NC}"
+            log "ERROR" "AGENT-$agent_name" "Cannot start $AGENT_TYPE - pane $pane_address not found"
+            echo -e "${RED}❌ Cannot start $AGENT_TYPE for $agent_name - pane not found${NC}"
         fi
     done
     wait
+    
+    echo -e "${YELLOW}Waiting for all $AGENT_TYPE instances to initialize...${NC}"
+    sleep 10
+    
+    # Extra delay to ensure Mother's output is complete
+    echo -e "${YELLOW}Ensuring clean agent initialization...${NC}"
     sleep 5
     
     # Send prompts to all agents with enhanced testing focus
@@ -498,7 +714,7 @@ main() {
         agent_addresses[$window_num]="$pane_address"
         
         # Create agent prompt with testing focus
-        agent_prompt=$(create_agent_prompt "$window_num" "$agent_name" "$agent_role" "$depends_on" "$notifies" "$wait_for" "${agent_specs[@]}")
+        agent_prompt=$(create_agent_prompt "$window_num" "$agent_name" "$agent_role" "$depends_on" "$notifies" "$wait_for" "$user_prompt" "${agent_specs[@]}")
         
         pane_address=$(get_pane_address $window_num "$agent_name")
         
@@ -507,11 +723,15 @@ main() {
         
         # Validate pane exists before sending prompt
         if tmux list-panes -t "$pane_address" >/dev/null 2>&1; then
-            echo "$agent_prompt" | while IFS= read -r line; do
-                printf '%s\n' "$line" | tmux load-buffer -
-                tmux paste-buffer -t "$pane_address"
-                tmux send-keys -t "$pane_address" Enter
-            done
+            # Wait a bit more for Claude to be ready
+            sleep 2
+            
+            # Send the entire prompt at once
+            printf '%s' "$agent_prompt" | tmux load-buffer -
+            tmux paste-buffer -t "$pane_address"
+            
+            # Small delay before Enter
+            sleep 0.5
             tmux send-keys -t "$pane_address" Enter
         else
             log "ERROR" "AGENT-$agent_name" "Cannot send prompt - pane $pane_address not found"
@@ -524,88 +744,48 @@ main() {
     echo -e "${GREEN}✅ All agents created successfully!${NC}"
     log "INFO" "ORCHESTRATOR" "All agents initialized successfully"
     
-    # Notify Mother that all agents are ready with enhanced instructions
+    # PHASE 2: Transition Mother to Coordination Mode
     sleep 3
-    echo -e "${CYAN}Notifying Mother that all agents are ready...${NC}"
+    echo -e "${MAGENTA}👑 Transitioning Mother to COORDINATION MODE...${NC}"
     
-    mother_complete_msg="
-
-=== ALL AGENTS CREATED AND READY ===
-
-The following agents are now active and waiting for instructions:
-"
+    # Build coordination prompt with all necessary info
+    local testing_requirements="comprehensive testing including unit tests, integration tests, end-to-end tests, and API endpoint tests"
+    local deployment_guidance="Focus on local development with production-ready structure"
+    local connection_strategy="Automatically assign ports starting from 3000"
     
+    # Create the coordination prompt
+    coord_prompt_file="$ORCHESTRATOR_DIR/coordination_prompt.txt"
+    create_coordination_prompt "$testing_requirements" "$deployment_guidance" "$connection_strategy" "$PROJECT_DIR" > "$coord_prompt_file"
+    
+    # Add agent list to coordination prompt
+    echo "" >> "$coord_prompt_file"
+    echo "=== ACTIVE AGENTS ===" >> "$coord_prompt_file"
     for idx in "${!agent_specs[@]}"; do
         spec="${agent_specs[$idx]}"
         IFS=':' read -r window_num agent_name agent_role <<< "$spec"
-        mother_complete_msg+="Window $window_num: $agent_name - $agent_role
-"
+        echo "Window $window_num: $agent_name - $agent_role" >> "$coord_prompt_file"
     done
+    echo "" >> "$coord_prompt_file"
+    echo "START COORDINATING NOW! Assign workspaces and tasks to each agent." >> "$coord_prompt_file"
     
-    mother_complete_msg+="
-
-CRITICAL - YOU MUST NOW EXECUTE THESE TASKS:
-
-1. Create workspace directories:
-   mkdir -p frontend backend database testing infrastructure docker
-
-2. Initialize the connection registry for all agents
-
-3. Send DETAILED instructions to each agent including:
-   - Their workspace assignment
-   - Specific tasks with test requirements
-   - Port assignments (avoid conflicts)
-   - Connection details they need
-
-EXAMPLE COMMANDS (adapt based on your agents and configuration):
-
-For frontend agent:
-tmux send-keys -t taco:2.0 \"Your workspace is \$PROJECT_DIR/frontend. Create frontend components with: $testing_requirements. $deployment_guidance. $connection_strategy\"
-tmux send-keys -t taco:2.0 Enter
-
-For backend agent:
-tmux send-keys -t taco:2.1 \"Your workspace is \$PROJECT_DIR/backend. Create backend services with: $testing_requirements. $deployment_guidance. Register endpoints in connection registry. $connection_strategy\"
-tmux send-keys -t taco:2.1 Enter
-
-For tester agent:
-tmux send-keys -t taco:2.3 \"Your workspace is \$PROJECT_DIR/testing. Execute: $testing_requirements. $([ "$CURL_TESTING" = "true" ] && echo "Test all endpoints with curl." || echo "Test endpoints as configured.") Report failures immediately.\"
-tmux send-keys -t taco:2.3 Enter
-
-MANDATORY REQUIREMENTS (NON-NEGOTIABLE):
-- Testing Strategy: $testing_requirements
-- Deployment: $deployment_guidance  
-- Connections: $connection_strategy
-- Test ALL endpoints with curl before marking complete
-- ALL builds must succeed without errors before proceeding
-- Enable comprehensive logging and monitoring
-- ALL errors must be caught, logged, and immediately fixed
-- NO code can be marked complete without passing all tests
-
-Connection Registry: $ORCHESTRATOR_DIR/connections.json
-Message Relay: $ORCHESTRATOR_DIR/message_relay.sh
-Test Coordinator: $ORCHESTRATOR_DIR/test_coordinator.sh
-Validation Script: $ORCHESTRATOR_DIR/validate_connections.sh
-Port Helper: $ORCHESTRATOR_DIR/port_helper.sh
-
-PORT COMMUNICATION PROTOCOL:
-1. All agents MUST use port_helper.sh to allocate ports
-2. All agents MUST update the connection registry when starting services
-3. All agents MUST check the registry before making connections
-4. All agents MUST notify others when ports change
-5. Use 'jq' to read from the registry: jq -r '.services.SERVICE_NAME' $ORCHESTRATOR_DIR/connections.json
-
-BEGIN COORDINATING THE PROJECT NOW!"
+    # Send coordination prompt to Mother
+    echo -e "${YELLOW}Sending coordination instructions to Mother...${NC}"
+    tmux send-keys -t "$SESSION_NAME:0.0" C-u
+    sleep 0.5
     
-    printf '%s' "$mother_complete_msg" | tmux load-buffer -
-    tmux paste-buffer -t "$SESSION_NAME:0.0"
+    # Send the coordination prompt
+    while IFS= read -r line; do
+        printf '%s\n' "$line" | tmux load-buffer -
+        tmux paste-buffer -t "$SESSION_NAME:0.0"
+        tmux send-keys -t "$SESSION_NAME:0.0" Enter
+    done < "$coord_prompt_file"
     
     sleep 0.5
     tmux send-keys -t "$SESSION_NAME:0.0" Enter
     
-    # Start test monitor in background
-    tmux new-window -t "$SESSION_NAME:2" -n "test-monitor" -c "$PROJECT_DIR"
-    tmux send-keys -t "$SESSION_NAME:2.0" "$ORCHESTRATOR_DIR/test_coordinator.sh monitor" Enter
-    
+    echo -e "${GREEN}✅ Mother is now in COORDINATION MODE!${NC}"
+    echo -e "${CYAN}Mother will now coordinate all agents to build the project.${NC}"
+
     # Display final status
     clear
     echo -e "${GREEN}✅ TACO FULLY INITIALIZED!${NC}"
@@ -629,6 +809,7 @@ BEGIN COORDINATING THE PROJECT NOW!"
     done
     echo
     echo -e "${YELLOW}Configuration:${NC}"
+    echo "  • CLI Agent: $AGENT_TYPE $([ -n "$AGENT_FLAGS" ] && echo "($AGENT_FLAGS)")"
     echo "  • Testing Strategy: $TESTING_STRATEGY"
     echo "  • Deployment Environment: $DEPLOYMENT_ENV"
     echo "  • Connection Management: $CONNECTION_STRATEGY"

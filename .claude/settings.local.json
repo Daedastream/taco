@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(tmux ls:*)",
+      "Bash(chmod:*)",
+      "Bash(/Users/louisxsheid/Dev/Daedastream/taco/debug_parsing.sh:*)",
+      "WebSearch"
+    ],
+    "deny": []
+  }
+}

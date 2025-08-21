@@ -75,10 +75,24 @@ send_to_agent() {
         return 1
     fi
     
-    # Send message
+    # Clear any existing input first
+    tmux send-keys -t "$target_pane" C-u
+    sleep 0.1
+    
+    # Send message using reliable method
     printf '%s' "$message" | tmux load-buffer -
     tmux paste-buffer -t "$target_pane"
+    
+    # Longer delay for Claude to process
+    sleep 0.5
     tmux send-keys -t "$target_pane" Enter
+    
+    # Verify message was sent
+    local sent_ok=true
+    if ! tmux capture-pane -t "$target_pane" -p | tail -1 | grep -q "$message" 2>/dev/null; then
+        echo "WARNING: Message may not have been delivered to $target_pane" >&2
+        sent_ok=false
+    fi
     
     # Log the message
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [RELAY] Sent to Agent $target_window: $message" >> "$(dirname "$0")/communication.log"

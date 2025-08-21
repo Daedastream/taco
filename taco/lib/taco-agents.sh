@@ -2,11 +2,130 @@
 # TACO - Tmux Agent Command Orchestrator
 # Agent Management and Specification
 
+# Two-phase Mother initialization - Phase 1: Specification Only
+create_specification_prompt() {
+    local user_request="$1"
+    
+    cat << EOF
+🚨 PHASE 1: SPECIFICATION GENERATION 🚨
+
+You are the MOTHER ORCHESTRATOR in TACO. 
+In this phase, you must ONLY output an AGENT_SPEC block to define agents.
+
+DO NOT use any tools (TodoWrite, List, Read, Search, Task, Bash).
+DO NOT explore files or start building.
+JUST output the specification.
+
+After you output the spec, you'll enter PHASE 2: COORDINATION MODE where you'll orchestrate all agents.
+
+Now output an AGENT_SPEC block for:
+
+PROJECT: $user_request
+
+⚠️ CONSTRAINTS ⚠️
+- NO tools allowed whatsoever
+- NO file exploration  
+- NO analysis or planning phase
+- NO explanations or commentary
+- JUST output the specification block
+
+Example (CREATE YOUR OWN - DO NOT COPY):
+<<EXAMPLE>>
+AGENT_SPEC_START
+AGENT:3:frontend_dev:Build React components and UI
+DEPENDS_ON:none
+NOTIFIES:validator
+WAIT_FOR:none
+
+AGENT:4:backend_dev:Create API endpoints and database
+DEPENDS_ON:none
+NOTIFIES:validator
+WAIT_FOR:none
+
+AGENT:5:validator:Validate code quality and standards
+DEPENDS_ON:frontend_dev,backend_dev
+NOTIFIES:tester
+WAIT_FOR:none
+
+AGENT:6:tester:Run tests and ensure quality
+DEPENDS_ON:validator
+NOTIFIES:none
+WAIT_FOR:validator
+AGENT_SPEC_END
+<</EXAMPLE>>
+
+YOUR RESPONSE MUST START WITH:
+AGENT_SPEC_START
+
+AND END WITH:
+AGENT_SPEC_END
+
+Rules:
+- Windows start from 3 (0=Mother, 1=monitor, 2=test-monitor)
+- Create real agent names (not "agent_name")
+- MUST include validator agents for code quality
+- MUST include testing/QA agents
+- Include 5-15 agents based on project complexity
+
+START YOUR RESPONSE NOW WITH THE AGENT_SPEC_START LINE:
+EOF
+}
+
+# Two-phase Mother initialization - Phase 2: Coordination
+create_coordination_prompt() {
+    local testing_requirements="$1"
+    local deployment_guidance="$2"  
+    local connection_strategy="$3"
+    local project_dir="$4"
+    
+    cat << EOF
+=== ALL AGENTS CREATED AND READY ===
+
+You are now in COORDINATION MODE. Your agents are ready for instructions.
+
+CRITICAL: Use the Bash tool to execute ALL communication commands!
+
+TO SEND MESSAGES TO AGENTS, YOU MUST USE 3 SEPARATE BASH TOOL CALLS:
+
+🔥 STEP 1: Bash tool → tmux send-keys -t taco:WINDOW_NUMBER "Your message"
+🔥 STEP 2: Bash tool → sleep 0.2  
+🔥 STEP 3: Bash tool → tmux send-keys -t taco:WINDOW_NUMBER Enter
+
+⚠️ EACH STEP MUST BE A SEPARATE BASH TOOL EXECUTION ⚠️
+
+MANDATORY REQUIREMENTS:
+- Testing Strategy: $testing_requirements
+- Deployment: $deployment_guidance  
+- Connections: $connection_strategy
+- Test ALL endpoints with curl before marking complete
+- ALL builds must succeed without errors
+- ALL errors must be caught, logged, and fixed immediately
+
+🔄 ORCHESTRATION REQUIREMENTS:
+1. ENABLE COLLABORATION: Instruct agents to share specifications with each other
+2. PREVENT OVERLAP: Ensure agents coordinate to avoid duplicate work
+3. FACILITATE COMMUNICATION: Encourage agents to ask questions and share updates
+4. MONITOR INTEGRATION: Watch for integration points between agents
+5. ENFORCE SHARING: Remind agents to broadcast their designs and APIs
+
+EXAMPLE - To send workspace to agent 3:
+
+STEP 1: Bash tool with command:
+tmux send-keys -t taco:3.0 "Your workspace is $project_dir/frontend. Start building the UI components."
+
+STEP 2: Bash tool with command:
+sleep 0.2
+
+STEP 3: Bash tool with command:
+tmux send-keys -t taco:3.0 Enter
+
+BEGIN COORDINATING NOW! Use Bash tool to send workspace instructions to each agent.
+EOF
+}
+
 # Enhanced mother prompt with testing and connection focus
 create_mother_prompt() {
     local user_request="$1"
-    local agent_count="$2"
-    local count_instruction="$3"
     
     # Build testing requirements - now mandatory and comprehensive
     local testing_requirements="comprehensive testing including unit tests, integration tests, end-to-end tests, and API endpoint tests"
@@ -28,186 +147,258 @@ create_mother_prompt() {
         "automatic") connection_strategy="Automatically assign ports starting from 3000" ;;
     esac
     
-    cat << EOF
-You are the MOTHER orchestrator agent for TACO (Tmux Agent Command Orchestrator).
-
-PROJECT REQUEST: $user_request
-PROJECT ROOT: $PROJECT_DIR
-
-CRITICAL REQUIREMENTS FOR THIS PROJECT:
-1. ALL code must include: $testing_requirements
-2. ALL connections between services must use a shared registry
-3. ALL endpoints must be tested with curl before marking as complete
-4. ALL builds must succeed without errors before proceeding
-5. ALL errors must be caught, logged, and fixed immediately
-6. $deployment_guidance
-7. $connection_strategy
-
-ANALYZE THE PROJECT REQUEST AND OUTPUT A SPECIFICATION.
-
-You MUST output agent specifications in this EXACT format:
-
-AGENT_SPEC_START
-AGENT:3:frontend:React frontend developer - builds UI with tests
-DEPENDS_ON:none
-NOTIFIES:4,7,8
-WAIT_FOR:none
-AGENT:4:backend:Express API developer - creates REST endpoints with tests
-DEPENDS_ON:5
-NOTIFIES:3,6,7,8
-WAIT_FOR:DB_READY
-AGENT:5:database:Database architect - designs schemas with migrations
-DEPENDS_ON:none
-NOTIFIES:4
-WAIT_FOR:none
-AGENT:6:mobile:React Native developer - builds mobile app with tests
-DEPENDS_ON:4
-NOTIFIES:3,7,8
-WAIT_FOR:API_READY
-AGENT:7:tester:QA engineer - runs all tests and validates connections
-DEPENDS_ON:none
-NOTIFIES:0,3,4,5,6
-WAIT_FOR:UI_READY,API_READY,MOBILE_READY
-AGENT:8:devops:DevOps engineer - manages Docker, ports, and deployments
-DEPENDS_ON:none
-NOTIFIES:0,4,5
-WAIT_FOR:none
-AGENT_SPEC_END
-
-CRITICAL SPECIFICATION RULES:
-- Window 0 is you (Mother), window 1 is monitor, window 2 is test-monitor
-- Start agents at window 3 and increment sequentially (3, 4, 5, 6, etc.)
-- NEVER reuse window numbers - each agent gets a unique number
-- NEVER create duplicate agent names - each must be unique and have distinct responsibilities
-- Create 2-15 agents total (optimal range for parallel development)
-- Include a dedicated testing agent and deployment/DevOps agent
-- Each agent should handle a specific, well-defined domain of work
-- Agents should be designed for maximum parallel development with minimal conflicts
-- Design dependencies carefully - avoid circular dependencies
-- Agent names should clearly reflect their unique function (e.g., 'webui', 'mobileapp', 'apiserver', 'userauth', 'database', 'testing', 'deployment')
-
-AGENT DESIGN PRINCIPLES:
-- Divide work by functional boundaries, not arbitrary splits
-- Ensure each agent can work independently on their domain
-- Use DEPENDS_ON and WAIT_FOR to coordinate between agents
-- Design for parallel work - minimize bottlenecks
-
-$count_instruction
-
-CONNECTION REGISTRY:
-After creating agents, you MUST establish a connection registry by having each agent register their services:
-
-Example:
-tmux send-keys -t taco:3.0 "echo '{\"services\": {\"api\": \"http://localhost:3001\"}, \"ports\": {\"api\": 3001}}' | jq -s '.[0] * .[1]' $PROJECT_DIR/.orchestrator/connections.json - > /tmp/conn.json && mv /tmp/conn.json $PROJECT_DIR/.orchestrator/connections.json"
-tmux send-keys -t taco:3.0 Enter
-
-Now analyze the project and OUTPUT YOUR SPECIFICATION.
-EOF
+    # Use the two-phase approach: specification first, then coordination
+    create_specification_prompt "$user_request"
 }
 
-# Parse agent specification with smart window reassignment
+# Function to strip ANSI color codes
+strip_ansi_codes() {
+    echo "$1" | sed 's/\x1b\[[0-9;]*m//g'
+}
+
+# Parse agent specification with smart window reassignment (compatible with older bash)
 parse_agent_specification() {
     local spec_file="$1"
+    local output_file="${2:-}"
     local agent_specs=()
-    local agent_deps=()
-    local agent_notifies=()
-    local agent_waits=()
-    local -A used_windows
-    local -A used_names
     local next_window=3  # Start from window 3 (0=mother, 1=monitor, 2=test-monitor)
     
-    local current_agent_idx=-1
+    local current_agent_name=""
+    local current_agent_role=""
+    local current_original_window=""
+    local current_memory_share=""
+    local current_parallel_with=""
+    local current_sub_agents=""
+    local current_thinking_mode=""
+    local current_memory_keys=""
+    local collecting_role=false
+    
+    # Simple duplicate checking using space-separated strings
+    local used_names=""
+    local used_windows=""
+    
+    log "INFO" "PARSER" "Starting to parse agent specification from $spec_file"
+    
+    # Helper function to check if name is already used
+    is_name_used() {
+        local name="$1"
+        [ -n "$used_names" ] && [[ " $used_names " == *" $name "* ]]
+    }
+    
+    # Helper function to check if window is already used  
+    is_window_used() {
+        local window="$1"
+        [ -n "$used_windows" ] && [[ " $used_windows " == *" $window "* ]]
+    }
+    
+    # First, check if we have a valid spec block
+    local has_spec_start=false
+    local has_spec_end=false
+    
     while IFS= read -r line; do
-        line=$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        # Strip leading/trailing whitespace for checking markers
+        local trimmed_line=$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        if [[ "$trimmed_line" =~ AGENT_SPEC_START ]]; then
+            has_spec_start=true
+        elif [[ "$trimmed_line" =~ AGENT_SPEC_END ]]; then
+            has_spec_end=true
+        fi
+    done < "$spec_file"
+    
+    if [ "$has_spec_start" = false ] || [ "$has_spec_end" = false ]; then
+        log "ERROR" "PARSER" "No valid AGENT_SPEC block found in $spec_file"
+        return 1
+    fi
+    
+    while IFS= read -r line; do
+        # Strip ANSI codes, Claude UI elements, and trim whitespace
+        line=$(strip_ansi_codes "$line")
+        # Remove Claude UI elements like ">", "⏺", etc.
+        line=$(echo "$line" | sed 's/^[>⏺⎿☐✽⏵│╭╮╰╯ ]*//; s/^[[:space:]]*//; s/[[:space:]]*$//')
         [ -z "$line" ] && continue
         
-        if [[ "$line" =~ ^AGENT:([0-9]+):([^:]+):(.+)$ ]]; then
-            local original_window="${BASH_REMATCH[1]}"
-            local agent_name="${BASH_REMATCH[2]}"
-            local agent_role="${BASH_REMATCH[3]}"
+        # Debug output
+        # log "DEBUG" "PARSER" "Processing line: $line"
+        
+        if [[ "$line" =~ ^AGENT: ]]; then
+            # Use cut to extract the parts reliably
+            local matched_window=$(echo "$line" | cut -d: -f2)
+            local matched_name=$(echo "$line" | cut -d: -f3)
+            local matched_role=$(echo "$line" | cut -d: -f4-)
             
-            # Reject duplicate agent names - they indicate poor specification
-            if [ -n "${used_names[$agent_name]}" ]; then
-                echo -e "${RED}❌ DUPLICATE AGENT NAME: $agent_name${NC}"
-                echo -e "${RED}   This indicates Mother created a poor specification.${NC}"
-                echo -e "${RED}   Each agent should have a unique name and distinct role.${NC}"
-                echo -e "${YELLOW}   Skipping duplicate agent. Mother should create better specifications.${NC}"
-                log "ERROR" "PARSER" "Rejected duplicate agent name: $agent_name"
+            # Remove any trailing :claude or other agent type indicators
+            matched_role=$(echo "$matched_role" | sed 's/:claude[[:space:]]*$//' | sed 's/:openai[[:space:]]*$//' | sed 's/:gemini[[:space:]]*$//')
+            
+            # Skip placeholder agent entries (exact match for template)
+            if [[ "$matched_name" == "agent_name" ]] && [[ "$matched_role" == "role description" ]]; then
+                log "WARN" "PARSER" "Skipping template placeholder: agent_name"
+                collecting_role=false
                 continue
             fi
             
-            # Assign next available window (skip 0=mother, 1=monitor, 2=test-monitor)
-            while [ -n "${used_windows[$next_window]}" ] || [ $next_window -eq 0 ] || [ $next_window -eq 1 ] || [ $next_window -eq 2 ]; do
-                next_window=$((next_window + 1))
-                # Safety check to prevent infinite loop
-                if [ $next_window -gt 50 ]; then
-                    echo -e "${RED}❌ Too many agents - exceeded window limit${NC}"
-                    log "ERROR" "PARSER" "Exceeded maximum window limit"
-                    break
+            # First, finalize any previous agent being collected
+            if [ "$collecting_role" = true ]; then
+                # Find next available window
+                while is_window_used "$next_window" || [ $next_window -eq 0 ] || [ $next_window -eq 1 ] || [ $next_window -eq 2 ]; do
+                    next_window=$((next_window + 1))
+                    if [ $next_window -gt 50 ]; then
+                        log "ERROR" "PARSER" "Exceeded maximum window limit"
+                        break
+                    fi
+                done
+                window_num=$next_window
+                
+                # Clean up role description
+                current_agent_role=$(echo "$current_agent_role" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^[[:space:]]*//; s/[[:space:]]*$//')
+                
+                log "INFO" "PARSER" "Found agent: $current_agent_name (window $window_num, originally $current_original_window)"
+                
+                # Record usage with V2 fields if present
+                used_windows="$used_windows $window_num"
+                used_names="$used_names $current_agent_name"
+                local spec_line="$window_num:$current_agent_name:$current_agent_role"
+                if [ -n "$current_memory_share" ] || [ -n "$current_parallel_with" ] || [ -n "$current_sub_agents" ] || [ -n "$current_thinking_mode" ] || [ -n "$current_memory_keys" ]; then
+                    spec_line="${spec_line}|MEMORY_SHARE:${current_memory_share}|PARALLEL_WITH:${current_parallel_with}|SUB_AGENTS:${current_sub_agents}|THINKING_MODE:${current_thinking_mode}|MEMORY_KEYS:${current_memory_keys}"
                 fi
-            done
-            local window_num=$next_window
+                agent_specs+=("$spec_line")
+                
+                next_window=$((next_window + 1))
+            fi
             
-            echo -e "${GREEN}Found agent: Window $window_num - $agent_name (was $original_window)${NC}"
-            log "INFO" "PARSER" "Found agent: $agent_name (window $window_num, originally $original_window)"
+            # Now start processing the new agent
+            original_window="$matched_window"
+            agent_name="$matched_name"
+            current_agent_role="$matched_role"
+            collecting_role=true
             
-            used_windows[$window_num]="$agent_name"
-            used_names[$agent_name]="$window_num"
-            agent_specs+=("$window_num:$agent_name:$agent_role")
-            current_agent_idx=$((${#agent_specs[@]} - 1))
+            # Check for duplicate agent names
+            if is_name_used "$agent_name"; then
+                log "WARN" "PARSER" "Duplicate agent name: $agent_name (skipping)"
+                collecting_role=false
+                continue
+            fi
             
-            next_window=$((next_window + 1))
-        elif [[ "$line" =~ ^DEPENDS_ON:(.+)$ ]] && [ $current_agent_idx -ge 0 ]; then
-            agent_deps[$current_agent_idx]="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^NOTIFIES:(.+)$ ]] && [ $current_agent_idx -ge 0 ]; then
-            agent_notifies[$current_agent_idx]="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^WAIT_FOR:(.+)$ ]] && [ $current_agent_idx -ge 0 ]; then
-            agent_waits[$current_agent_idx]="${BASH_REMATCH[1]}"
+            # Validate agent name
+            if [ -z "$agent_name" ] || [[ "$agent_name" =~ ^[[:space:]]*$ ]]; then
+                log "WARN" "PARSER" "Invalid agent name (empty or whitespace only)"
+                collecting_role=false
+                continue
+            fi
+            
+            # Store current agent info but don't finalize yet
+            current_original_window="$original_window"
+            current_agent_name="$agent_name"
+            # Reset V2 fields for new agent
+            current_memory_share=""
+            current_parallel_with=""
+            current_sub_agents=""
+            current_thinking_mode=""
+            current_memory_keys=""
+            
+        elif [[ "$line" =~ ^MEMORY_SHARE:(.*)$ ]]; then
+            current_memory_share="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^PARALLEL_WITH:(.*)$ ]]; then
+            current_parallel_with="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^SUB_AGENTS:(.*)$ ]]; then
+            current_sub_agents="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^THINKING_MODE:(.*)$ ]]; then
+            current_thinking_mode="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^MEMORY_KEYS:(.*)$ ]]; then
+            current_memory_keys="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^DEPENDS_ON: ]] || [[ "$line" =~ ^NOTIFIES: ]] || [[ "$line" =~ ^WAIT_FOR: ]] || \
+              [[ "$line" =~ ^AGENT_SPEC_END$ ]] || [[ "$line" =~ ^\[.*\]$ ]]; then
+            # These lines are handled elsewhere or should be ignored
+            :
+        elif [ "$collecting_role" = true ]; then
+            # Continue collecting role description lines
+            current_agent_role="$current_agent_role $line"
         fi
-    done < <(awk '/AGENT_SPEC_START/,/AGENT_SPEC_END/' "$spec_file")
+    done < <(awk '/AGENT_SPEC_START/,/AGENT_SPEC_END/' "$spec_file" | grep -v 'AGENT_SPEC_START' | grep -v 'AGENT_SPEC_END')
+    
+    # Process any remaining agent being collected
+    if [ "$collecting_role" = true ]; then
+        while is_window_used "$next_window" || [ $next_window -eq 0 ] || [ $next_window -eq 1 ] || [ $next_window -eq 2 ]; do
+            next_window=$((next_window + 1))
+            if [ $next_window -gt 50 ]; then
+                log "ERROR" "PARSER" "Exceeded maximum window limit"
+                break
+            fi
+        done
+        window_num=$next_window
+        
+        current_agent_role=$(echo "$current_agent_role" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^[[:space:]]*//; s/[[:space:]]*$//')
+        
+        log "INFO" "PARSER" "Found agent: $current_agent_name (window $window_num, originally $current_original_window)"
+        
+        used_windows="$used_windows $window_num"
+        used_names="$used_names $current_agent_name"
+        # Include V2 fields if present
+        local spec_line="$window_num:$current_agent_name:$current_agent_role"
+        if [ -n "$current_memory_share" ] || [ -n "$current_parallel_with" ] || [ -n "$current_sub_agents" ] || [ -n "$current_thinking_mode" ] || [ -n "$current_memory_keys" ]; then
+            spec_line="${spec_line}|MEMORY_SHARE:${current_memory_share}|PARALLEL_WITH:${current_parallel_with}|SUB_AGENTS:${current_sub_agents}|THINKING_MODE:${current_thinking_mode}|MEMORY_KEYS:${current_memory_keys}"
+        fi
+        agent_specs+=("$spec_line")
+    fi
     
     # Return results
-    echo "${agent_specs[@]}"
+    log "INFO" "PARSER" "Parsed ${#agent_specs[@]} agents from specification"
+    
+    if [ -n "$output_file" ]; then
+        # Write to file if provided
+        printf '%s\n' "${agent_specs[@]}" > "$output_file"
+    else
+        # Echo to stdout
+        for spec in "${agent_specs[@]}"; do
+            echo "$spec"
+        done
+    fi
 }
 
 # Validate specification quality
 validate_agent_specification() {
     local agent_specs=("$@")
-    local min_agents=2
-    local max_agents=15
+    local min_agents=1
+    local max_agents=20
     local agent_count=${#agent_specs[@]}
     
     if [ $agent_count -lt $min_agents ]; then
-        echo -e "${RED}❌ Too few agents ($agent_count). Need at least $min_agents for proper coordination.${NC}"
-        echo -e "${YELLOW}   Mother should create more specialized agents for better parallel development.${NC}"
+        log "ERROR" "VALIDATOR" "No agents found in specification"
         return 1
     fi
     
     if [ $agent_count -gt $max_agents ]; then
-        echo -e "${RED}❌ Too many agents ($agent_count). Maximum is $max_agents to avoid complexity.${NC}"
-        echo -e "${YELLOW}   Mother should consolidate similar roles into fewer, well-defined agents.${NC}"
-        return 1
+        log "WARN" "VALIDATOR" "Large number of agents ($agent_count). Performance may be impacted"
     fi
     
     # Check for essential agent types
     local has_tester=false
+    local has_validator=false
     local has_devops=false
     for spec in "${agent_specs[@]}"; do
         IFS=':' read -r window_num agent_name agent_role <<< "$spec"
         if echo "$agent_role" | grep -qi "test\\|qa\\|quality"; then
             has_tester=true
         fi
+        if echo "$agent_role" | grep -qi "validat\\|review\\|check\\|lint\\|audit"; then
+            has_validator=true
+        fi
         if echo "$agent_role" | grep -qi "devops\\|deploy\\|docker\\|infrastructure"; then
             has_devops=true
         fi
     done
     
+    if [ "$has_validator" = false ]; then
+        log "ERROR" "VALIDATOR" "No validator agent found. Validators are REQUIRED for code quality."
+        return 1
+    fi
+    
     if [ "$has_tester" = false ]; then
-        echo -e "${YELLOW}⚠️  Warning: No dedicated testing agent found. This may impact quality assurance.${NC}"
+        log "ERROR" "VALIDATOR" "No testing agent found. Testing agents are REQUIRED."
+        return 1
     fi
     
     if [ "$has_devops" = false ]; then
-        echo -e "${YELLOW}⚠️  Warning: No dedicated DevOps/deployment agent found. This may impact deployment.${NC}"
+        log "WARN" "VALIDATOR" "No dedicated DevOps/deployment agent found. This may impact deployment."
     fi
     
     return 0
@@ -221,11 +412,12 @@ create_agent_prompt() {
     local depends_on="$4"
     local notifies="$5"
     local wait_for="$6"
-    local agent_specs=("${@:7}")
+    local project_prompt="$7"
+    local agent_specs=("${@:8}")
     
     local agent_prompt="You are an AI development agent in TACO (Tmux Agent Command Orchestrator).
 
-PROJECT: $user_prompt
+PROJECT: $project_prompt
 PROJECT ROOT: $PROJECT_DIR
 
 YOUR ROLE: $agent_role
@@ -277,32 +469,56 @@ Note: Agents are running in PANE MODE.
 
 $agent_directory
 
-COMMUNICATION METHODS:
-1. Report to Mother (RECOMMENDED):
-$PROJECT_DIR/.orchestrator/message_relay.sh \"[AGENT-$window_num → MOTHER]: Test results - 5 passed, 0 failed\"
+🔥 MANDATORY COMMUNICATION PROTOCOL FOR ALL AGENTS 🔥
 
-2. Message another agent by window number:
-$PROJECT_DIR/.orchestrator/message_relay.sh \"[AGENT-$window_num → AGENT-3]: API endpoints ready at port 3001\" 3
+TO SEND ANY MESSAGE TO ANY AGENT OR MOTHER, YOU MUST USE 3 SEPARATE BASH TOOL CALLS:
 
-3. Direct tmux method (fallback only):
-tmux send-keys -t taco:0.0 \"[AGENT-$window_num → MOTHER]: Test results - 5 passed, 0 failed\"
-tmux send-keys -t taco:0.0 Enter
+🔥 STEP 1: Use Bash tool to execute ONLY: tmux send-keys -t $SESSION_NAME:TARGET_WINDOW \"[AGENT-$window_num → TARGET]: Your message here\"
+🔥 STEP 2: Use Bash tool to execute ONLY: sleep 0.2
+🔥 STEP 3: Use Bash tool to execute ONLY: tmux send-keys -t $SESSION_NAME:TARGET_WINDOW Enter
+
+⚠️  EACH STEP MUST BE A SEPARATE BASH TOOL EXECUTION
+⚠️  DO NOT COMBINE ANY STEPS INTO ONE COMMAND
+⚠️  NEVER use && or semicolon to chain commands
+⚠️  Each Bash tool execution must contain EXACTLY ONE command
+
+EXAMPLE - To notify Agent 3 that API is ready:
+STEP 1: Bash tool → tmux send-keys -t $SESSION_NAME:3.0 \"[AGENT-$window_num → AGENT-3]: API endpoints ready at http://localhost:3001\"
+STEP 2: Bash tool → sleep 0.2
+STEP 3: Bash tool → tmux send-keys -t $SESSION_NAME:3.0 Enter
+
+EXAMPLE - To report to Mother:
+STEP 1: Bash tool → tmux send-keys -t $SESSION_NAME:0.0 \"[AGENT-$window_num → MOTHER]: Task completed successfully\"
+STEP 2: Bash tool → sleep 0.2  
+STEP 3: Bash tool → tmux send-keys -t $SESSION_NAME:0.0 Enter
 
 IMPORTANT: Use window numbers from the agent directory above for accurate messaging."
     else
         agent_prompt+="
 $agent_directory
 
-COMMUNICATION METHODS:
-1. Report to Mother (RECOMMENDED):
-$PROJECT_DIR/.orchestrator/message_relay.sh \"[WINDOW-$window_num → MOTHER]: Test results - 5 passed, 0 failed\"
+🔥 MANDATORY COMMUNICATION PROTOCOL FOR ALL AGENTS 🔥
 
-2. Message another agent by window number:
-$PROJECT_DIR/.orchestrator/message_relay.sh \"[WINDOW-$window_num → WINDOW-3]: API endpoints ready at port 3001\" 3
+TO SEND ANY MESSAGE TO ANY AGENT OR MOTHER, YOU MUST USE 3 SEPARATE BASH TOOL CALLS:
 
-3. Direct tmux method (fallback only):
-tmux send-keys -t taco:3.0 \"[WINDOW-$window_num → WINDOW-3]: API endpoints ready at port 3001\"
-tmux send-keys -t taco:3.0 Enter
+🔥 STEP 1: Use Bash tool to execute ONLY: tmux send-keys -t $SESSION_NAME:TARGET_WINDOW \"[WINDOW-$window_num → TARGET]: Your message here\"
+🔥 STEP 2: Use Bash tool to execute ONLY: sleep 0.2
+🔥 STEP 3: Use Bash tool to execute ONLY: tmux send-keys -t $SESSION_NAME:TARGET_WINDOW Enter
+
+⚠️  EACH STEP MUST BE A SEPARATE BASH TOOL EXECUTION
+⚠️  DO NOT COMBINE ANY STEPS INTO ONE COMMAND
+⚠️  NEVER use && or semicolon to chain commands
+⚠️  Each Bash tool execution must contain EXACTLY ONE command
+
+EXAMPLE - To notify Window 3 that API is ready:
+STEP 1: Bash tool → tmux send-keys -t $SESSION_NAME:3.0 \"[WINDOW-$window_num → WINDOW-3]: API endpoints ready at http://localhost:3001\"
+STEP 2: Bash tool → sleep 0.2
+STEP 3: Bash tool → tmux send-keys -t $SESSION_NAME:3.0 Enter
+
+EXAMPLE - To report to Mother:
+STEP 1: Bash tool → tmux send-keys -t $SESSION_NAME:0.0 \"[WINDOW-$window_num → MOTHER]: Task completed successfully\"
+STEP 2: Bash tool → sleep 0.2  
+STEP 3: Bash tool → tmux send-keys -t $SESSION_NAME:0.0 Enter
 
 IMPORTANT: Use window numbers from the agent directory above for accurate messaging."
     fi
@@ -326,7 +542,37 @@ CONNECTION REGISTRY SHARING:
 - ALWAYS notify other agents when ports change
 - Use the registry to discover other services: jq -r '.services | to_entries[] | \"\\(.key): \\(.value)\"' $PROJECT_DIR/.orchestrator/connections.json
 
-Wait for Mother's initial instructions to begin."
+🔄 CRITICAL COLLABORATION REQUIREMENTS:
+1. SHARE SPECIFICATIONS: When you design an API, database schema, or interface:
+   - WRITE your spec to: $PROJECT_DIR/.orchestrator/shared_specs/[agent_name]_spec.md
+   - IMMEDIATELY notify relevant agents with the specification
+   - Example: "[AGENT-$window_num → AGENT-4]: API spec ready at .orchestrator/shared_specs/backend_spec.md"
+   
+2. COORDINATE WORK: Before starting any task:
+   - CHECK what other agents are working on to avoid duplication
+   - ANNOUNCE what you're about to build
+   - Example: "[AGENT-$window_num → ALL]: Starting work on user authentication module"
+
+3. REQUEST INFORMATION: Don't guess - ASK other agents:
+   - Need an API endpoint? Ask the backend agent
+   - Need component props? Ask the frontend agent
+   - Example: "[AGENT-$window_num → AGENT-3]: What props does the UserCard component accept?"
+
+4. BROADCAST UPDATES: When you complete significant work:
+   - Notify ALL relevant agents
+   - Share what's now available for them to use
+   - Example: "[AGENT-$window_num → ALL]: Database schema ready with users, posts, comments tables"
+
+5. VALIDATION COORDINATION:
+   - Before marking work complete, notify validator agent
+   - Share test results with testing agent
+   - Coordinate with dependent agents before major changes
+
+Remember: You're part of a TEAM. No agent works in isolation. Communicate early and often!
+
+Wait for Mother's initial instructions to begin.
+
+=== END OF AGENT PROMPT ==="
     
     echo "$agent_prompt"
 }

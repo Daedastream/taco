@@ -1,0 +1,14 @@
+Build a Tier-1 church website with Next.js 14, TypeScript, Tailwind CSS, Prisma ORM, SQLite/PostgreSQL, Stripe payments, Resend email, GA4 analytics, NextAuth authentication. Target WCAG 2.1 AA compliance and Lighthouse scores 95+.
+
+AGENT_SPEC_START
+AGENT:3:scaffold_engineer:Initialize Next.js 14 with TypeScript, configure Tailwind CSS and shadcn ui, setup ESLint and Prettier, create project structure and env template
+AGENT:4:database_engineer:Design Prisma schema with User Campus Sermon Event Fund Donation FormSubmission models, create migrations, implement NextAuth with ADMIN STAFF VOLUNTEER VIEWER roles, build seed script
+AGENT:5:frontend_engineer:Build public pages including home about plan-a-visit sermons events give watch contact prayer, implement SEO metadata, forms with zod validation, responsive design
+AGENT:6:admin_engineer:Create admin dashboard with CRUD for sermons events pages forms donations settings, implement role-based access control, use shadcn ui components
+AGENT:7:integration_engineer:Implement Stripe checkout and webhooks, Resend email for forms and receipts, GA4 tracking, media uploads, rate limiting, ICS calendar generation
+AGENT:8:testing_engineer:Write unit tests for forms API auth, integration tests for filters exports donations, E2E tests with Playwright, validate endpoints with curl, run Lighthouse audits
+AGENT:9:qa_engineer:Review design consistency, test responsive breakpoints, verify WCAG compliance, validate seed data, compile README with setup and deployment instructions
+AGENT_SPEC_END
+
+Testing: Comprehensive unit, integration, E2E tests. All endpoints validated. Lighthouse 95+.
+Deployment: Complete README, env.example, seed data, Docker-ready.

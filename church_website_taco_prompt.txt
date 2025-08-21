@@ -1,0 +1,121 @@
+🌮 TIER-1 CHURCH WEBSITE PROJECT SPECIFICATION 🌮
+
+PROJECT DESCRIPTION:
+Build a modern, accessible church website with full content management, giving platform, livestreaming, and admin panel. Target WCAG 2.1 AA compliance and Lighthouse scores ≥95 for SEO/Accessibility.
+
+TECH STACK:
+- Frontend: Next.js 14 (App Router) + TypeScript
+- Styling: Tailwind CSS + shadcn/ui components
+- Database: Prisma ORM with SQLite (dev) → PostgreSQL (prod)
+- Authentication: NextAuth.js with role-based access
+- Payments: Stripe (test mode for development)
+- Email: Resend API
+- Analytics: Google Analytics 4
+- Media: Local storage with S3-ready abstraction
+
+AGENT_SPEC_START
+AGENT:3:scaffold_engineer:Setup Next.js 14 project with TypeScript, Tailwind CSS, shadcn/ui, ESLint, Prettier, project structure, env vars template
+DEPENDS_ON:none
+NOTIFIES:database_engineer,frontend_engineer
+WAIT_FOR:none
+
+AGENT:4:database_engineer:Design Prisma schema (User, Campus, Sermon, Event, Fund, Donation, FormSubmission), create migrations, implement NextAuth with roles (ADMIN/STAFF/VOLUNTEER/VIEWER), build seed script with demo data
+DEPENDS_ON:scaffold_engineer
+NOTIFIES:frontend_engineer,admin_engineer,integration_engineer
+WAIT_FOR:scaffold_engineer
+
+AGENT:5:frontend_engineer:Build public pages (home, about, plan-a-visit, sermons, events, give, watch, contact, prayer) with SEO, forms validation using zod + react-hook-form, responsive design
+DEPENDS_ON:scaffold_engineer,database_engineer
+NOTIFIES:testing_engineer,qa_engineer
+WAIT_FOR:database_engineer
+
+AGENT:6:admin_engineer:Create admin dashboard at /admin with CRUD for sermons, events, pages, forms inbox, donations, site settings, implement role-based access control
+DEPENDS_ON:database_engineer
+NOTIFIES:testing_engineer,qa_engineer
+WAIT_FOR:database_engineer
+
+AGENT:7:integration_engineer:Implement Stripe checkout and webhooks, Resend email for forms/receipts, GA4 tracking, media upload system, rate limiting, ICS calendar generation for events
+DEPENDS_ON:database_engineer
+NOTIFIES:testing_engineer
+WAIT_FOR:frontend_engineer,admin_engineer
+
+AGENT:8:testing_engineer:Write unit tests for forms/API/auth, integration tests for filters/exports/donations, E2E tests with Playwright, validate all endpoints with curl, run Lighthouse audits
+DEPENDS_ON:frontend_engineer,admin_engineer,integration_engineer
+NOTIFIES:qa_engineer
+WAIT_FOR:integration_engineer
+
+AGENT:9:qa_engineer:Review design consistency, test responsive breakpoints, verify WCAG compliance, validate seed data display, compile comprehensive README with setup/deployment instructions
+DEPENDS_ON:testing_engineer
+NOTIFIES:none
+WAIT_FOR:testing_engineer
+AGENT_SPEC_END
+
+TESTING REQUIREMENTS:
+- Unit tests: Form validation, API routes, role-based access
+- Integration tests: Sermon filters, event exports, Stripe flow
+- E2E tests: Critical user journeys (visit planning, donations, form submissions)
+- Performance: Lighthouse scores ≥95 for SEO and Accessibility
+- All endpoints validated with curl before marking complete
+
+DEPLOYMENT REQUIREMENTS:
+- Complete README with setup instructions
+- .env.example with all required variables documented
+- Database seed script with realistic demo data
+- Docker-ready configuration
+- CI/CD workflow templates
+
+CONNECTION STRATEGY:
+- Development server: Port 3000
+- Database: Port 5432 (PostgreSQL) or file-based (SQLite)
+- Email service: External (Resend API)
+- Payment processing: External (Stripe API)
+
+DATA MODEL HIGHLIGHTS:
+- Multi-campus support with service times
+- Sermon series with video/audio/transcript
+- Recurring events with calendar export
+- Multiple giving funds with one-time/recurring donations
+- Form submissions with status tracking
+- Role-based user management
+
+KEY FEATURES:
+1. PUBLIC PAGES:
+   - Home: Hero, service times, featured sermon, upcoming events, CTAs
+   - About: Beliefs, staff, campus information
+   - Plan a Visit: Capture form with email follow-up
+   - Sermons: Filter by series/speaker/topic/scripture
+   - Events: Calendar view with ICS export
+   - Give: Stripe checkout with fund selection
+   - Watch: Livestream embed with "Live Now" indicator
+   - Contact/Prayer: Separate forms with spam protection
+
+2. ADMIN PANEL:
+   - Dashboard with metrics and recent activity
+   - Content management for all public pages
+   - Form submission inbox with status tracking
+   - Donation records and reporting
+   - Site-wide settings management
+
+3. TECHNICAL REQUIREMENTS:
+   - Mobile-first responsive design
+   - Server-side rendering for SEO
+   - Progressive enhancement
+   - Secure authentication with sessions
+   - Rate limiting on public endpoints
+   - Honeypot fields for spam prevention
+
+SUCCESS CRITERIA:
+✓ All 7 agents complete their tasks without errors
+✓ Full test suite passing (unit, integration, E2E)
+✓ Lighthouse scores ≥95 for SEO and Accessibility
+✓ Stripe test payments creating donation records
+✓ Email notifications working for all forms
+✓ Admin panel fully functional with role-based access
+✓ Complete documentation and deployment-ready codebase
+
+MOTHER COORDINATION NOTES:
+- Assign workspace directories: /scaffold, /database, /frontend, /admin, /integrations, /testing, /qa
+- Use message_relay.sh for inter-agent communication
+- Monitor test results continuously
+- Ensure atomic commits to prevent conflicts
+- Validate each phase before proceeding to next

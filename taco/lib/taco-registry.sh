@@ -200,6 +200,7 @@ validate_all_connections() {
             echo "✗ $service is NOT accessible" >> "$VALIDATION_LOG"
             # Notify Mother about connection issue
             tmux send-keys -t taco:0.0 "CONNECTION ISSUE: $service at $url is not accessible"
+            sleep 0.2
             tmux send-keys -t taco:0.0 Enter
         fi
     done
