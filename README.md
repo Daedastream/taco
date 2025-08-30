@@ -1,36 +1,42 @@
 # 🌮 TACO - Tmux Agent Command Orchestrator
 
-TACO is a powerful orchestration tool that coordinates multiple Claude AI agents in tmux sessions to work collaboratively on software development projects. It provides automated agent management, inter-agent communication, testing coordination, and deployment support.
+TACO orchestrates multiple AI agents in tmux sessions to work collaboratively on software development projects. A "Mother" orchestrator agent analyzes your requirements and spawns specialized worker agents that coordinate through tmux messaging.
 
 ## Features
 
-- **Multi-Agent Orchestration**: Automatically creates and manages multiple Claude agents working in parallel
-- **Smart Communication**: Built-in message relay system for agent-to-agent and agent-to-mother communication
-- **Test-Driven Development**: Comprehensive testing requirements enforced across all agents
-- **Connection Registry**: Centralized service discovery and port management
-- **Docker Support**: Automatic detection and configuration for containerized environments
-- **Real-time Monitoring**: Live status dashboard showing agent activity, test results, and system health
+- **Multi-Agent Orchestration**: Mother agent analyzes requirements and spawns 2-10 specialized worker agents
+- **Tmux-Based Communication**: Agents coordinate through tmux send-keys commands
+- **Real-time Monitoring**: Live status dashboard showing agent activity and logs
 - **Flexible Display Modes**: Choose between separate tmux windows or panes for agent display
+- **Support for Multiple AI Models**: Can specify Claude, GPT-4, Gemini, or other CLI-based AI tools
+- **Session State Management**: Saves and tracks orchestration state
 
 ## Prerequisites
 
 - **tmux**: Terminal multiplexer for managing sessions
-- **claude**: Anthropic's Claude CLI tool
+- **AI CLI tool**: At least one of:
+  - `claude` - Anthropic's Claude CLI (recommended)
+  - `gpt` - OpenAI CLI tool
+  - `gemini` - Google's Gemini CLI
+  - Or any CLI-based AI tool
 - **bash**: Version 4.0 or higher (uses associative arrays)
-- **jq**: (Optional but recommended) JSON processor for enhanced functionality
 
 ### Installation of Prerequisites
 
 macOS:
 ```bash
-brew install tmux jq
-# Install Claude CLI from Anthropic
+# Install newer bash (macOS ships with 3.2)
+brew install bash tmux
+
+# Install your preferred AI CLI tool
+# For Claude: Follow Anthropic's installation instructions
 ```
 
 Linux:
 ```bash
-sudo apt-get install tmux jq
-# Install Claude CLI from Anthropic
+sudo apt-get install tmux
+
+# Install your preferred AI CLI tool
 ```
 
 ## Installation
@@ -82,15 +88,26 @@ taco
 taco [options]
 
 Options:
-  -f, --file <path>     Load project description from file
-  -p, --prompt <text>   Provide project description directly
-  -h, --help           Show help message
-  -v, --version        Show version information
+  -f, --file <path>       Load project description from file
+  -p, --prompt <text>     Provide project description directly
+  -m, --model <model>     Claude model to use (sonnet or opus, default: sonnet)
+  --claude                Use Claude (default)
+  --openai                Use OpenAI GPT-4
+  --gemini                Use Google Gemini
+  --anthropic-api         Use Anthropic API
+  --custom <cmd>          Use custom AI command
+  --panes                 Use panes instead of windows
+  -h, --help             Show help message
+  -v, --version          Show version information
 
 Examples:
   taco -f project_spec.txt
   taco -p "Build a React app with Express backend"
-  taco  # Interactive mode
+  taco -m opus            # Use Claude Opus for more complex tasks
+  taco -m sonnet          # Use Claude Sonnet (default, faster)
+  taco --openai           # Use GPT-4 instead of Claude
+  taco --panes            # Display agents in panes
+  taco  # Interactive mode with default model (Sonnet)
 ```
 
 ### Project Description Examples
@@ -125,30 +142,41 @@ EOF
 taco -f myproject.txt
 ```
 
+### Model Selection (Claude)
+
+When using Claude as your AI backend, you can choose between two models:
+
+- **Sonnet** (default): Faster response times, ideal for most development tasks
+- **Opus**: More capable for complex architectural decisions and nuanced requirements
+
+Set the model via:
+1. Command line: `taco -m opus` or `taco -m sonnet`
+2. Environment variable: `export TACO_CLAUDE_MODEL=opus`
+3. Configuration file: Edit `~/.taco/settings.json`
+
+The selected model will be used for both the Mother orchestrator and all spawned agents.
+
 ## How It Works
 
-1. **Mother Orchestrator**: The main Claude agent that analyzes your project requirements and creates specialized worker agents
+1. **Mother Orchestrator**: The main AI agent analyzes your project requirements and outputs a specification for what specialized agents are needed
 
-2. **Agent Creation**: Based on your project, Mother creates 2-10 specialized agents:
+2. **Agent Spawning**: TACO parses the Mother's specification and automatically creates 2-10 specialized agents in separate tmux windows/panes:
    - Frontend developers
    - Backend developers
    - Database architects
-   - Mobile developers
-   - QA/Testing engineers
+   - Testing engineers
    - DevOps engineers
+   - Any other specialized roles the Mother deems necessary
 
-3. **Workspace Organization**: Each agent gets its own workspace directory and focuses on its specific domain
+3. **Coordination**: The Mother agent enters "coordination mode" and orchestrates the worker agents by:
+   - Sending tasks via tmux send-keys commands
+   - Assigning workspaces and responsibilities
+   - Managing inter-agent communication
 
-4. **Communication Protocol**: Agents communicate through:
-   - Message relay system
-   - Shared connection registry
-   - Direct tmux messaging
-
-5. **Testing & Validation**: All agents must:
-   - Write comprehensive tests
-   - Validate endpoints with curl
-   - Report test results
-   - Fix failures immediately
+4. **Monitoring**: A real-time dashboard shows:
+   - Agent status and activity
+   - Communication logs
+   - System state
 
 ## Configuration
 
@@ -184,21 +212,14 @@ After running TACO, your project will have:
 ```
 project-dir/
 ├── .orchestrator/
-│   ├── connections.json       # Service registry
 │   ├── orchestrator.log       # Main log file
 │   ├── communication.log      # Agent messages
-│   ├── test_results.log       # Test outcomes
-│   ├── validation.log         # Connection validation
 │   ├── state.json            # Session state
-│   ├── message_relay.sh      # Communication helper
-│   ├── port_helper.sh        # Port management
-│   ├── test_coordinator.sh   # Test runner
-│   └── validate_connections.sh # Service validator
-├── frontend/                  # Frontend code
-├── backend/                   # Backend code
-├── database/                  # Database schemas
-├── testing/                   # Test suites
-└── docker/                    # Docker configs
+│   ├── agent_spec.txt        # Mother's agent specification
+│   ├── parsed_agents.txt     # Parsed agent list
+│   ├── mother_prompt.txt     # Initial prompt to Mother
+│   └── show_status.sh        # Status monitor script
+└── [workspace directories created by agents]
 ```
 
 ## Navigation
@@ -207,8 +228,7 @@ Once TACO is running:
 
 - `Ctrl+b + 0`: Mother orchestrator
 - `Ctrl+b + 1`: Status monitor
-- `Ctrl+b + 2`: Test monitor
-- `Ctrl+b + 3-9`: Agent windows
+- `Ctrl+b + 2-9`: Agent windows
 - `Ctrl+b + d`: Detach (keeps running)
 - `Ctrl+b + arrows`: Navigate panes (in pane mode)
 
@@ -216,62 +236,47 @@ Once TACO is running:
 
 The status monitor (window 1) shows:
 - Session information
-- Agent status
-- Recent messages
-- Test results
-- Connection registry
-- Build status
+- Agent status and list
+- Recent log messages
+- Orchestration state
 - Elapsed time
 
-## Advanced Features
+## Advanced Usage
 
-### Port Management
+### Working with Different AI Models
 
 ```bash
-# Agents can allocate ports
-$PROJECT_DIR/.orchestrator/port_helper.sh allocate myservice
+# Use GPT-4 instead of Claude
+taco --openai
 
-# Check port allocation
-$PROJECT_DIR/.orchestrator/port_helper.sh show
+# Use Gemini
+taco --gemini
+
+# Use a custom command
+taco --custom "my-ai-cli"
 ```
 
-### Connection Validation
+### Display Modes
 
 ```bash
-# Validate all service connections
-$PROJECT_DIR/.orchestrator/validate_connections.sh
-```
+# Use panes for compact display (max 8 agents)
+taco --panes
 
-### Docker Integration
-
-TACO automatically detects Docker environments and:
-- Adjusts port ranges
-- Uses container names instead of localhost
-- Generates docker-compose.yml files
-- Creates appropriate Dockerfiles
-
-### Message Relay
-
-Agents communicate using the relay system:
-```bash
-# Agent to Mother
-$PROJECT_DIR/.orchestrator/message_relay.sh "[AGENT-3 → MOTHER]: API ready"
-
-# Agent to Agent
-$PROJECT_DIR/.orchestrator/message_relay.sh "[AGENT-3 → AGENT-4]: Database schema updated" 4
+# Use windows for unlimited agents (default)
+taco
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **"No space for new pane"**: Too many agents for pane mode. Use window mode instead.
+1. **"declare: -g: invalid option"**: Your bash version is too old. Install bash 4+ with `brew install bash` on macOS.
 
-2. **Port conflicts**: Check the connection registry and use port_helper.sh
+2. **"No space for new pane"**: Too many agents for pane mode. Use window mode instead (default).
 
-3. **Agent not responding**: Check the orchestrator.log and agent's tmux pane
+3. **Agent not responding**: Check the orchestrator.log and the agent's tmux window
 
-4. **Tests failing**: Check test_results.log and the test-monitor window
+4. **Mother not generating specification**: Check mother_output_debug.txt for the Mother's actual output
 
 ### Debug Mode
 
@@ -285,7 +290,8 @@ taco
 
 - Main log: `.orchestrator/orchestrator.log`
 - Messages: `.orchestrator/communication.log`
-- Tests: `.orchestrator/test_results.log`
+- Mother output: `.orchestrator/mother_output_debug.txt`
+- Agent specification: `.orchestrator/agent_spec.txt`
 
 ## Contributing
 
@@ -303,9 +309,9 @@ MIT License - see LICENSE file for details
 
 ## Acknowledgments
 
-- Built for use with Anthropic's Claude AI
-- Inspired by the need for better AI agent orchestration
-- Thanks to the tmux and jq communities
+- Works with multiple AI CLI tools (Claude, GPT-4, Gemini, etc.)
+- Inspired by the need for multi-agent AI orchestration
+- Built on tmux for robust terminal session management
 
 ## Support
 

@@ -29,6 +29,7 @@ load_taco_settings() {
     export TACO_PARALLEL=$(jq -r '.orchestration.parallel_execution' "$settings_file" 2>/dev/null || echo "true")
     export TACO_MAX_AGENTS=$(jq -r '.orchestration.max_agents' "$settings_file" 2>/dev/null || echo "20")
     export TACO_DEFAULT_AGENT=$(jq -r '.orchestration.default_agent_type' "$settings_file" 2>/dev/null || echo "claude")
+    export TACO_CLAUDE_MODEL=$(jq -r '.orchestration.claude_model' "$settings_file" 2>/dev/null || echo "sonnet")
     
     # Communication settings
     export TACO_PROTOCOL=$(jq -r '.communication.protocol' "$settings_file" 2>/dev/null || echo "enhanced")
@@ -65,7 +66,8 @@ save_taco_settings() {
         "mode": "${TACO_MODE:-hybrid}",
         "parallel_execution": ${TACO_PARALLEL:-true},
         "max_agents": ${TACO_MAX_AGENTS:-20},
-        "default_agent_type": "${TACO_DEFAULT_AGENT:-claude}"
+        "default_agent_type": "${TACO_DEFAULT_AGENT:-claude}",
+        "claude_model": "${TACO_CLAUDE_MODEL:-sonnet}"
     },
     "communication": {
         "protocol": "${TACO_PROTOCOL:-enhanced}",
@@ -113,6 +115,19 @@ configure_settings_interactive() {
         5) TACO_DEFAULT_AGENT="gemini" ;;
         *) TACO_DEFAULT_AGENT="claude" ;;
     esac
+    
+    # Claude model selection (if using Claude)
+    if [ "$TACO_DEFAULT_AGENT" = "claude" ]; then
+        echo -e "\n${YELLOW}Claude Model:${NC}"
+        echo "1. Sonnet (faster, default)"
+        echo "2. Opus (more capable)"
+        read -r -p "Choose model (1-2, default 1): " model_choice
+        
+        case $model_choice in
+            2) TACO_CLAUDE_MODEL="opus" ;;
+            *) TACO_CLAUDE_MODEL="sonnet" ;;
+        esac
+    fi
     
     # MCP servers
     echo -e "\n${YELLOW}Enable MCP servers? (y/n, default y):${NC}"

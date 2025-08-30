@@ -62,10 +62,16 @@ launch_claude_agent() {
         create_claude_subagent_configs "$workspace"
         
         # Launch with MCP if enabled
+        # Use the configured Claude model (default: sonnet)
+        local model_flag=""
+        if [ -n "$TACO_CLAUDE_MODEL" ]; then
+            model_flag="--model $TACO_CLAUDE_MODEL"
+        fi
+        
         if [ "$TACO_MCP_ENABLED" = "true" ]; then
-            tmux send-keys -t "taco:$window_num" "cd '$workspace' && claude --mcp-filesystem --mcp-git --continue $flags" Enter
+            tmux send-keys -t "taco:$window_num" "cd '$workspace' && claude --mcp-filesystem --mcp-git --continue $model_flag $flags" Enter
         else
-            tmux send-keys -t "taco:$window_num" "cd '$workspace' && claude --continue $flags" Enter
+            tmux send-keys -t "taco:$window_num" "cd '$workspace' && claude --continue $model_flag $flags" Enter
         fi
         
         sleep 0.5
@@ -85,7 +91,12 @@ launch_claude_agent() {
         tmux send-keys -t "taco:$window_num" "/agents create test-runner 'Comprehensive testing specialist'" Enter
     else
         # Classic Claude mode
-        tmux send-keys -t "taco:$window_num" "cd '$workspace' && claude $flags" Enter
+        # Use the configured Claude model (default: sonnet)
+        local model_flag=""
+        if [ -n "$TACO_CLAUDE_MODEL" ]; then
+            model_flag="--model $TACO_CLAUDE_MODEL"
+        fi
+        tmux send-keys -t "taco:$window_num" "cd '$workspace' && claude $model_flag $flags" Enter
         sleep 0.5
         tmux send-keys -t "taco:$window_num" "$prompt" Enter
     fi

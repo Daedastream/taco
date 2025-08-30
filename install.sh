@@ -10,7 +10,6 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${GREEN}🌮 Installing TACO v2.0 - Tmux Agent Command Orchestrator${NC}"
-echo -e "${CYAN}Now with Claude Sub-Agents, MCP, and Multi-Model Support!${NC}"
 echo
 
 # Create user config directory
@@ -135,14 +134,6 @@ echo "To get started:"
 echo "  1. Ensure $INSTALL_PREFIX/bin is in your PATH"
 echo "  2. Configure settings: taco --configure"
 echo "  3. Run: taco --help"
-echo ""
-echo "New in v2.0:"
-echo "  • Claude Sub-Agents with /agents command"
-echo "  • MCP (Model Context Protocol) support"
-echo "  • Multi-model orchestration (GPT-4, Gemini, Llama, etc.)"
-echo "  • Advanced hooks system"
-echo "  • Hybrid orchestration mode"
-echo "  • Settings management via JSON"
 echo
 echo "To uninstall:"
 echo "  Run: $INSTALL_PREFIX/share/taco/uninstall.sh"

@@ -78,13 +78,19 @@ launch_parallel_hybrid_agents() {
     echo -e "${GREEN}🚀 TACO ADVANTAGE: Launching 5 parallel agents...${NC}"
     echo -e "${CYAN}This would take 5x longer with sequential sub-agents!${NC}"
     
+    # Use the configured Claude model (default: sonnet)
+    local model_flag=""
+    if [ -n "$TACO_CLAUDE_MODEL" ]; then
+        model_flag="--model $TACO_CLAUDE_MODEL"
+    fi
+    
     # Launch Frontend Lead (Claude with sub-agents)
-    tmux send-keys -t taco:3 "cd $project_dir/frontend && claude --continue" Enter
+    tmux send-keys -t taco:3 "cd $project_dir/frontend && claude --continue $model_flag" Enter
     tmux send-keys -t taco:3 "/agents create frontend-specialist 'React component expert'" Enter
     sleep 0.5
     
     # Launch Backend Lead (Claude with sub-agents) - PARALLEL
-    tmux send-keys -t taco:4 "cd $project_dir/backend && claude --continue" Enter
+    tmux send-keys -t taco:4 "cd $project_dir/backend && claude --continue $model_flag" Enter
     tmux send-keys -t taco:4 "/agents create api-designer 'RESTful API architect'" Enter
     sleep 0.5
     
@@ -97,7 +103,7 @@ launch_parallel_hybrid_agents() {
     tmux send-keys -t taco:6 "Create ETL pipeline for real-time analytics" Enter
     
     # Launch Testing Lead (Claude with sub-agents) - PARALLEL
-    tmux send-keys -t taco:7 "cd $project_dir/testing && claude --continue" Enter
+    tmux send-keys -t taco:7 "cd $project_dir/testing && claude --continue $model_flag" Enter
     tmux send-keys -t taco:7 "/agents create e2e-specialist 'Playwright test expert'" Enter
     
     echo -e "${GREEN}✅ All agents launched in parallel!${NC}"

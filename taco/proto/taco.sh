@@ -53,6 +53,9 @@ echo -e "${BLUE}🌮 TACO - Test-Aware Coordinated Orchestrator v1.0${NC}"
 PROMPT_FILE=""
 SKIP_INTERACTIVE=false
 
+# Model selection
+TACO_CLAUDE_MODEL="${TACO_CLAUDE_MODEL:-sonnet}"  # Default to sonnet
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -f|--file)
@@ -65,17 +68,23 @@ while [[ $# -gt 0 ]]; do
             SKIP_INTERACTIVE=true
             shift 2
             ;;
+        -m|--model)
+            TACO_CLAUDE_MODEL="$2"
+            shift 2
+            ;;
         -h|--help)
             echo -e "${CYAN}Usage: $0 [options]${NC}"
             echo -e "${YELLOW}Options:${NC}"
             echo "  -f, --file <path>     Load project description from file"
             echo "  -p, --prompt <text>   Provide project description directly"
+            echo "  -m, --model <model>   Claude model to use (sonnet or opus, default: sonnet)"
             echo "  -h, --help           Show this help message"
             echo
             echo -e "${CYAN}Examples:${NC}"
             echo "  $0 -f project_spec.txt"
             echo "  $0 -p \"Build a React app with Express backend\""
-            echo "  $0  # Interactive mode"
+            echo "  $0 -m opus -p \"Complex architectural design\""
+            echo "  $0  # Interactive mode with default model (sonnet)"
             exit 0
             ;;
         *)
@@ -85,6 +94,13 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Export the model for use in other functions
+export TACO_CLAUDE_MODEL
+
+# Display model selection
+echo -e "${CYAN}Using Claude model: ${GREEN}$TACO_CLAUDE_MODEL${NC}"
+echo
 
 # Safety check for critical processes
 check_critical_processes() {
@@ -1442,7 +1458,12 @@ create_mother_prompt "$user_prompt" "$agent_count" "$count_instruction" > "$moth
 # Launch Mother Claude
 echo -e "${YELLOW}Starting Claude for Mother...${NC}"
 tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PROJECT_DIR' && clear" Enter
-tmux send-keys -t "$SESSION_NAME:0.0" "claude --dangerously-skip-permissions" Enter
+# Use the configured Claude model (default: sonnet)
+model_flag=""
+if [ -n "$TACO_CLAUDE_MODEL" ]; then
+    model_flag="--model $TACO_CLAUDE_MODEL"
+fi
+tmux send-keys -t "$SESSION_NAME:0.0" "claude --dangerously-skip-permissions $model_flag" Enter
 
 # Wait for Claude to start
 echo -e "${YELLOW}Waiting for Claude to initialize...${NC}"
@@ -1755,7 +1776,12 @@ for idx in "${!agent_specs[@]}"; do
         if tmux capture-pane -t "$pane_address" -p | grep -q "claude"; then
             log "INFO" "AGENT-$agent_name" "Claude already running in $pane_address, skipping"
         else
-            tmux send-keys -t "$pane_address" "claude --dangerously-skip-permissions" Enter &
+            # Use the configured Claude model (default: sonnet)
+            model_flag=""
+            if [ -n "$TACO_CLAUDE_MODEL" ]; then
+                model_flag="--model $TACO_CLAUDE_MODEL"
+            fi
+            tmux send-keys -t "$pane_address" "claude --dangerously-skip-permissions $model_flag" Enter &
         fi
     else
         log "ERROR" "AGENT-$agent_name" "Cannot start Claude - pane $pane_address not found"

@@ -304,7 +304,12 @@ launch_agents_with_dependencies() {
             sleep 0.2
             
             # Initialize Claude with memory
-            tmux send-keys -t "taco:$window" "claude --continue" Enter
+            # Use the configured Claude model (default: sonnet)
+            local model_flag=""
+            if [ -n "$TACO_CLAUDE_MODEL" ]; then
+                model_flag="--model $TACO_CLAUDE_MODEL"
+            fi
+            tmux send-keys -t "taco:$window" "claude --continue $model_flag" Enter
             sleep 0.5
             
             # Set up memory context
