@@ -221,8 +221,17 @@ main() {
     
     # Old code removed - now using new agent selection above
     
+    # Determine orchestrator vs worker agent types
+    # Default: keep Mother as Claude for robust spec generation; workers use selected type
+    MOTHER_AGENT_TYPE="${TACO_MOTHER_AGENT_TYPE:-claude}"
+    WORKER_AGENT_TYPE="$AGENT_TYPE"
+    if [ "$AGENT_TYPE" = "claude" ]; then
+        MOTHER_AGENT_TYPE="claude"
+        WORKER_AGENT_TYPE="claude"
+    fi
+
     # Export agent configuration for use in other modules
-    export TACO_AGENT_TYPE="$AGENT_TYPE"
+    export TACO_AGENT_TYPE="$WORKER_AGENT_TYPE"
     export TACO_AGENT_FLAGS="$AGENT_FLAGS"
     export TACO_HYBRID_MODE="$HYBRID_MODE"
     export TACO_CACHE_ENABLED="$CACHE_ENABLED"
@@ -497,9 +506,9 @@ main() {
     
     # Launch Mother Agent
     agent_cmd=$(get_agent_command)
-    echo -e "${YELLOW}Starting $AGENT_TYPE for Mother...${NC}"
+    echo -e "${YELLOW}Starting $MOTHER_AGENT_TYPE for Mother...${NC}"
     tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PROJECT_DIR' && clear" Enter
-    tmux send-keys -t "$SESSION_NAME:0.0" "$agent_cmd" Enter
+    tmux send-keys -t "$SESSION_NAME:0.0" "$(get_agent_command "$MOTHER_AGENT_TYPE")" Enter
     
     # Wait for agent to start
     echo -e "${YELLOW}Waiting for $AGENT_TYPE to initialize...${NC}"
@@ -651,22 +660,22 @@ main() {
     create_agent_containers "${agent_specs[@]}"
     
     # Initialize all agent instances with validation
-    agent_cmd=$(get_agent_command)
-    echo -e "${CYAN}Initializing $AGENT_TYPE instances...${NC}"
+    agent_cmd=$(get_agent_command "$WORKER_AGENT_TYPE")
+    echo -e "${CYAN}Initializing $WORKER_AGENT_TYPE instances...${NC}"
     for idx in "${!agent_specs[@]}"; do
         spec="${agent_specs[$idx]}"
         IFS=':' read -r window_num agent_name agent_role <<< "$spec"
         
         pane_address=$(get_pane_address $window_num "$agent_name")
         
-        echo -e "${CYAN}Starting $AGENT_TYPE for $agent_name at $pane_address${NC}"
-        log "INFO" "AGENT-$agent_name" "Starting $AGENT_TYPE instance at $pane_address"
+        echo -e "${CYAN}Starting $WORKER_AGENT_TYPE for $agent_name at $pane_address${NC}"
+        log "INFO" "AGENT-$agent_name" "Starting $WORKER_AGENT_TYPE instance at $pane_address"
         
         # Validate pane exists and check if agent is already running
         if tmux list-panes -t "$pane_address" >/dev/null 2>&1; then
             # Check if agent is already running in this pane (check for any of the agent types)
-            if tmux capture-pane -t "$pane_address" -p | grep -qE "claude|codex|gemini"; then
-                log "INFO" "AGENT-$agent_name" "$AGENT_TYPE already running in $pane_address, skipping"
+            if tmux capture-pane -t "$pane_address" -p | grep -qE "claude|codex|gemini|openai|ollama|mistral"; then
+                log "INFO" "AGENT-$agent_name" "$WORKER_AGENT_TYPE already running in $pane_address, skipping"
             else
                 tmux send-keys -t "$pane_address" "$agent_cmd" Enter &
             fi

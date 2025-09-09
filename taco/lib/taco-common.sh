@@ -189,7 +189,14 @@ show_version() {
 
 # Get agent command based on type and flags
 get_agent_command() {
-    local agent_type="${TACO_AGENT_TYPE:-claude}"
+    # Optional first arg: explicit agent type
+    local explicit_type="$1"
+    local agent_type
+    if [ -n "$explicit_type" ]; then
+        agent_type="$explicit_type"
+    else
+        agent_type="${TACO_AGENT_TYPE:-claude}"
+    fi
     local agent_flags="${TACO_AGENT_FLAGS:-}"
     local model_flag=""
     [ -n "$TACO_CLAUDE_MODEL" ] && model_flag="--model $TACO_CLAUDE_MODEL"
