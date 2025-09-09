@@ -16,6 +16,34 @@ DO NOT use any tools (TodoWrite, List, Read, Search, Task, Bash).
 DO NOT explore files or start building.
 JUST output the specification.
 
+PREFERRED FORMAT: JSON (most reliable)
+Return a JSON object between explicit markers so we can parse deterministically:
+
+AGENT_SPEC_JSON_START
+{
+  "agents": [
+    {
+      "window": 3,
+      "name": "frontend_dev",
+      "role": "Build React components and UI",
+      "depends_on": [],
+      "notifies": ["validator"],
+      "wait_for": []
+    },
+    {
+      "window": 4,
+      "name": "backend_dev",
+      "role": "Create API endpoints and database",
+      "depends_on": [],
+      "notifies": ["validator"],
+      "wait_for": []
+    }
+  ]
+}
+AGENT_SPEC_JSON_END
+
+If you cannot output JSON, fallback to the legacy block format below.
+
 After you output the spec, you'll enter PHASE 2: COORDINATION MODE where you'll orchestrate all agents.
 
 Now output an AGENT_SPEC block for:
@@ -191,7 +219,33 @@ parse_agent_specification() {
         [ -n "$used_windows" ] && [[ " $used_windows " == *" $window "* ]]
     }
     
-    # First, check if we have a valid spec block
+    # First, try to parse JSON spec if present (preferred)
+    if command -v jq >/dev/null 2>&1; then
+        local json_block
+        json_block=$(awk 'BEGIN{capture=0} /AGENT_SPEC_JSON_START/{capture=1;next} /AGENT_SPEC_JSON_END/{capture=0} capture{print}' "$spec_file")
+        if [ -n "$json_block" ]; then
+            # Normalize and parse
+            local count
+            count=$(printf '%s' "$json_block" | jq -r '(.agents // .Agents // .AGENTS) | length')
+            if [ "$count" != "null" ] && [ "$count" -ge 1 ] 2>/dev/null; then
+                # Build agent_specs as window:name:role
+                while IFS= read -r line; do
+                    agent_specs+=("$line")
+                done < <(printf '%s' "$json_block" | jq -r '(.agents // .Agents // .AGENTS)[] | "\(.window):\(.name):\(.role)"')
+                # Write to output if requested
+                if [ -n "$output_file" ]; then
+                    : > "$output_file"
+                    for spec in "${agent_specs[@]}"; do
+                        echo "$spec" >> "$output_file"
+                    done
+                fi
+                log "INFO" "PARSER" "Parsed ${#agent_specs[@]} agents from JSON specification"
+                return 0
+            fi
+        fi
+    fi
+
+    # Otherwise, check if we have a valid legacy spec block
     local has_spec_start=false
     local has_spec_end=false
     
