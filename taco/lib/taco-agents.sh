@@ -211,20 +211,31 @@ parse_agent_specification() {
     fi
     
     while IFS= read -r line; do
-        # Strip ANSI codes, Claude UI elements, and trim whitespace
+        # Strip ANSI codes, decorations, bullets, and trim whitespace
         line=$(strip_ansi_codes "$line")
-        # Remove Claude UI elements like ">", "⏺", etc.
-        line=$(echo "$line" | sed 's/^[>⏺⎿☐✽⏵│╭╮╰╯ ]*//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+        line=$(echo "$line" | sed 's/^[>⏺⎿☐✽⏵│╭╮╰╯•*\- ]*//; s/^[[:space:]]*//; s/[[:space:]]*$//')
         [ -z "$line" ] && continue
+        
+        # Normalize for case-insensitive matching
+        local line_upper=$(echo "$line" | tr '[:lower:]' '[:upper:]')
         
         # Debug output
         # log "DEBUG" "PARSER" "Processing line: $line"
         
-        if [[ "$line" =~ ^AGENT: ]]; then
-            # Use cut to extract the parts reliably
-            local matched_window=$(echo "$line" | cut -d: -f2)
-            local matched_name=$(echo "$line" | cut -d: -f3)
-            local matched_role=$(echo "$line" | cut -d: -f4-)
+        if [[ "$line_upper" =~ ^AGENT[[:space:]]*:?[[:space:]]* ]]; then
+            # Remove leading AGENT token (with optional colon) and capture rest
+            local rest=$(echo "$line" | sed -E 's/^[Aa][Gg][Ee][Nn][Tt][[:space:]]*:?[[:space:]]*//')
+            # Split on ':' – tolerate spaces around delimiters
+            local matched_window=$(echo "$rest" | cut -d: -f1 | sed 's/[[:space:]]//g')
+            local matched_name=$(echo "$rest" | cut -d: -f2 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            local matched_role=$(echo "$rest" | cut -d: -f3- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            
+            # Fallback: formats like "name - role" without window
+            if [ -z "$matched_name" ] && echo "$rest" | grep -q " - "; then
+                matched_window=""
+                matched_name=$(echo "$rest" | sed -E 's/ *-.*$//')
+                matched_role=$(echo "$rest" | sed -E 's/^.*- *//')
+            fi
             
             # Remove any trailing :claude or other agent type indicators
             matched_role=$(echo "$matched_role" | sed 's/:claude[[:space:]]*$//' | sed 's/:openai[[:space:]]*$//' | sed 's/:gemini[[:space:]]*$//')
@@ -295,18 +306,18 @@ parse_agent_specification() {
             current_thinking_mode=""
             current_memory_keys=""
             
-        elif [[ "$line" =~ ^MEMORY_SHARE:(.*)$ ]]; then
+        elif [[ "$line_upper" =~ ^MEMORY_SHARE: ]]; then
             current_memory_share="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^PARALLEL_WITH:(.*)$ ]]; then
+        elif [[ "$line_upper" =~ ^PARALLEL_WITH: ]]; then
             current_parallel_with="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^SUB_AGENTS:(.*)$ ]]; then
+        elif [[ "$line_upper" =~ ^SUB_AGENTS: ]]; then
             current_sub_agents="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^THINKING_MODE:(.*)$ ]]; then
+        elif [[ "$line_upper" =~ ^THINKING_MODE: ]]; then
             current_thinking_mode="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^MEMORY_KEYS:(.*)$ ]]; then
+        elif [[ "$line_upper" =~ ^MEMORY_KEYS: ]]; then
             current_memory_keys="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^DEPENDS_ON: ]] || [[ "$line" =~ ^NOTIFIES: ]] || [[ "$line" =~ ^WAIT_FOR: ]] || \
-              [[ "$line" =~ ^AGENT_SPEC_END$ ]] || [[ "$line" =~ ^\[.*\]$ ]]; then
+        elif [[ "$line_upper" =~ ^DEPENDS_ON: ]] || [[ "$line_upper" =~ ^NOTIFIES: ]] || [[ "$line_upper" =~ ^WAIT_FOR: ]] || \
+              [[ "$line_upper" =~ ^AGENT_SPEC_END$ ]] || [[ "$line" =~ ^\[.*\]$ ]]; then
             # These lines are handled elsewhere or should be ignored
             :
         elif [ "$collecting_role" = true ]; then
