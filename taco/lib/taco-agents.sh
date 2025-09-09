@@ -226,7 +226,9 @@ parse_agent_specification() {
         json_block=$(awk 'BEGIN{capture=0} /AGENT_SPEC_JSON_START/{capture=1;next} /AGENT_SPEC_JSON_END/{capture=0} capture{print}' "$spec_file")
         if [ -n "$json_block" ]; then
             # Strip markdown fences/backticks and trim
-            json_block=$(printf '%s' "$json_block" | sed -E 's/^```.*$//g; s/```$//g')
+            json_block=$(printf '%s' "$json_block" | sed -E 's/^```.*$//g; s/^`+$//g; s/`+$//g')
+            # Drop obvious prompt prefixes that can leak into captures (e.g., cursh>, claude>, etc.)
+            json_block=$(printf '%s' "$json_block" | sed -E 's/^[A-Za-z_][A-Za-z0-9_]*> *//')
             # Normalize and parse
             local count
             count=$(printf '%s' "$json_block" | jq -r '(.agents // .Agents // .AGENTS) | length' 2>/dev/null || echo "")

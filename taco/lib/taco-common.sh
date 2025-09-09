@@ -199,7 +199,10 @@ get_agent_command() {
     fi
     local agent_flags="${TACO_AGENT_FLAGS:-}"
     local model_flag=""
-    [ -n "$TACO_CLAUDE_MODEL" ] && model_flag="--model $TACO_CLAUDE_MODEL"
+    # Guard against unset or literal "null" model
+    if [ -n "$TACO_CLAUDE_MODEL" ] && [ "$TACO_CLAUDE_MODEL" != "null" ]; then
+        model_flag="--model $TACO_CLAUDE_MODEL"
+    fi
     
     case "$agent_type" in
         claude)
