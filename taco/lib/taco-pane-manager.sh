@@ -3,9 +3,11 @@
 # Pane and Window Management
 
 # Arrays to store pane mappings and agent info
-declare -gA pane_mapping
-declare -gA agent_roles
-declare -gA agent_addresses
+# Use indexed arrays for broad Bash compatibility (Bash 3.2+)
+# Keys are numeric window indices, which work with indexed arrays
+pane_mapping=()
+agent_roles=()
+agent_addresses=()
 
 # Get pane address for agent with validation
 get_pane_address() {

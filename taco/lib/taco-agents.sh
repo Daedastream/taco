@@ -313,7 +313,7 @@ parse_agent_specification() {
             # Continue collecting role description lines
             current_agent_role="$current_agent_role $line"
         fi
-    done < <(awk '/AGENT_SPEC_START/,/AGENT_SPEC_END/' "$spec_file" | grep -v 'AGENT_SPEC_START' | grep -v 'AGENT_SPEC_END')
+    done < <(awk 'BEGIN{IGNORECASE=1} /AGENT_SPEC_START/,/AGENT_SPEC_END/' "$spec_file" | grep -iv 'AGENT_SPEC_START' | grep -iv 'AGENT_SPEC_END')
     
     # Process any remaining agent being collected
     if [ "$collecting_role" = true ]; then

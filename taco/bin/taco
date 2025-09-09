@@ -510,8 +510,8 @@ main() {
     tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PROJECT_DIR' && clear" Enter
     tmux send-keys -t "$SESSION_NAME:0.0" "$(get_agent_command "$MOTHER_AGENT_TYPE")" Enter
     
-    # Wait for agent to start
-    echo -e "${YELLOW}Waiting for $AGENT_TYPE to initialize...${NC}"
+    # Wait for Mother agent to start
+    echo -e "${YELLOW}Waiting for $MOTHER_AGENT_TYPE to initialize...${NC}"
     sleep 5
     
     # Send the mother prompt
@@ -714,7 +714,7 @@ main() {
         elif [[ "$line" =~ ^WAIT_FOR:(.+)$ ]] && [ $current_agent_idx -ge 0 ]; then
             agent_waits[$current_agent_idx]="${BASH_REMATCH[1]}"
         fi
-    done < <(awk '/AGENT_SPEC_START/,/AGENT_SPEC_END/' "$cleaned_file")
+    done < <(awk 'BEGIN{IGNORECASE=1} /AGENT_SPEC_START/,/AGENT_SPEC_END/' "$cleaned_file")
     
     for idx in "${!agent_specs[@]}"; do
         spec="${agent_specs[$idx]}"
