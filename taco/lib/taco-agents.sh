@@ -17,7 +17,8 @@ DO NOT explore files or start building.
 JUST output the specification.
 
 PREFERRED FORMAT: JSON (most reliable)
-Return a JSON object between explicit markers so we can parse deterministically:
+Return a STRICT JSON object between explicit markers so we can parse deterministically.
+Do NOT include backticks or markdown fences in the JSON block.
 
 AGENT_SPEC_JSON_START
 {
@@ -224,10 +225,12 @@ parse_agent_specification() {
         local json_block
         json_block=$(awk 'BEGIN{capture=0} /AGENT_SPEC_JSON_START/{capture=1;next} /AGENT_SPEC_JSON_END/{capture=0} capture{print}' "$spec_file")
         if [ -n "$json_block" ]; then
+            # Strip markdown fences/backticks and trim
+            json_block=$(printf '%s' "$json_block" | sed -E 's/^```.*$//g; s/```$//g')
             # Normalize and parse
             local count
-            count=$(printf '%s' "$json_block" | jq -r '(.agents // .Agents // .AGENTS) | length')
-            if [ "$count" != "null" ] && [ "$count" -ge 1 ] 2>/dev/null; then
+            count=$(printf '%s' "$json_block" | jq -r '(.agents // .Agents // .AGENTS) | length' 2>/dev/null || echo "")
+            if [ -n "$count" ] && [ "$count" != "null" ] && [ "$count" -ge 1 ] 2>/dev/null; then
                 # Build agent_specs as window:name:role
                 while IFS= read -r line; do
                     agent_specs+=("$line")
@@ -241,6 +244,8 @@ parse_agent_specification() {
                 fi
                 log "INFO" "PARSER" "Parsed ${#agent_specs[@]} agents from JSON specification"
                 return 0
+            else
+                log "WARN" "PARSER" "JSON spec block present but not valid JSON agents array"
             fi
         fi
     fi
@@ -265,9 +270,9 @@ parse_agent_specification() {
     fi
     
     while IFS= read -r line; do
-        # Strip ANSI codes, decorations, bullets, and trim whitespace
+        # Strip ANSI codes, simple bullets, and trim whitespace (BSD sed-safe)
         line=$(strip_ansi_codes "$line")
-        line=$(echo "$line" | sed 's/^[>⏺⎿☐✽⏵│╭╮╰╯•*\- ]*//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+        line=$(echo "$line" | sed -E 's/^[>\*\-•[:space:]]+//; s/^[[:space:]]*//; s/[[:space:]]*$//')
         [ -z "$line" ] && continue
         
         # Normalize for case-insensitive matching

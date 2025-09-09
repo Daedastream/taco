@@ -506,7 +506,19 @@ main() {
     
     # Launch Mother Agent
     agent_cmd=$(get_agent_command)
-    echo -e "${YELLOW}Starting $MOTHER_AGENT_TYPE for Mother...${NC}"
+    # Pretty print agent type with color
+    color_for_type() {
+        case "$1" in
+            claude) echo "$MAGENTA$1$NC" ;;
+            codex) echo "$CYAN$1$NC" ;;
+            gemini) echo "$BLUE$1$NC" ;;
+            openai) echo "$GREEN$1$NC" ;;
+            llama) echo "$YELLOW$1$NC" ;;
+            mistral) echo "$CYAN$1$NC" ;;
+            *) echo "$1" ;;
+        esac
+    }
+    echo -e "Starting $(color_for_type "$MOTHER_AGENT_TYPE") for Mother..."
     tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PROJECT_DIR' && clear" Enter
     tmux send-keys -t "$SESSION_NAME:0.0" "$(get_agent_command "$MOTHER_AGENT_TYPE")" Enter
     
@@ -661,14 +673,14 @@ main() {
     
     # Initialize all agent instances with validation
     agent_cmd=$(get_agent_command "$WORKER_AGENT_TYPE")
-    echo -e "${CYAN}Initializing $WORKER_AGENT_TYPE instances...${NC}"
+    echo -e "${CYAN}Initializing $(color_for_type "$WORKER_AGENT_TYPE") instances...${NC}"
     for idx in "${!agent_specs[@]}"; do
         spec="${agent_specs[$idx]}"
         IFS=':' read -r window_num agent_name agent_role <<< "$spec"
         
         pane_address=$(get_pane_address $window_num "$agent_name")
         
-        echo -e "${CYAN}Starting $WORKER_AGENT_TYPE for $agent_name at $pane_address${NC}"
+        echo -e "${CYAN}Starting $(color_for_type "$WORKER_AGENT_TYPE") for $agent_name at $pane_address${NC}"
         log "INFO" "AGENT-$agent_name" "Starting $WORKER_AGENT_TYPE instance at $pane_address"
         
         # Validate pane exists and check if agent is already running
