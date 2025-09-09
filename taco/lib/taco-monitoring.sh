@@ -192,31 +192,68 @@ save_state() {
     shift
     local agent_specs=("$@")
     
-    cat > "$state_file" << EOF
+    if command -v jq >/dev/null 2>&1; then
+        local up_json
+        up_json=$(printf '%s' "$user_prompt" | jq -Rs .)
+        # Write header
+        cat > "$state_file" << EOF
 {
-    "project": "$user_prompt",
+    "project": $up_json,
     "project_dir": "$PROJECT_DIR",
     "session": "$SESSION_NAME",
+    "display_mode": "${DISPLAY_MODE:-windows}",
+    "agent_type": "${TACO_AGENT_TYPE:-claude}",
     "start_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "agent_count": ${#agent_specs[@]},
     "testing_enabled": true,
     "connection_validation": true,
     "agents": [
 EOF
-    
-    local first=true
-    for spec in "${agent_specs[@]}"; do
-        IFS=':' read -r window_num agent_name agent_role <<< "$spec"
-        [ "$first" = true ] && first=false || echo "," >> "$state_file"
-        cat >> "$state_file" << EOF
+        local first=true
+        for spec in "${agent_specs[@]}"; do
+            IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+            [ "$first" = true ] && first=false || echo "," >> "$state_file"
+            # Escape role and name safely
+            local name_json role_json
+            name_json=$(printf '%s' "$agent_name" | jq -Rs .)
+            role_json=$(printf '%s' "$agent_role" | jq -Rs .)
+            cat >> "$state_file" << EOF
+        {
+            "window": $window_num,
+            "name": $name_json,
+            "role": $role_json
+        }
+EOF
+        done
+        echo -e "\n    ]\n}" >> "$state_file"
+    else
+        # Fallback without jq (may break on quotes/newlines in prompt)
+        cat > "$state_file" << EOF
+{
+    "project": "$user_prompt",
+    "project_dir": "$PROJECT_DIR",
+    "session": "$SESSION_NAME",
+    "display_mode": "${DISPLAY_MODE:-windows}",
+    "agent_type": "${TACO_AGENT_TYPE:-claude}",
+    "start_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "agent_count": ${#agent_specs[@]},
+    "testing_enabled": true,
+    "connection_validation": true,
+    "agents": [
+EOF
+        local first=true
+        for spec in "${agent_specs[@]}"; do
+            IFS=':' read -r window_num agent_name agent_role <<< "$spec"
+            [ "$first" = true ] && first=false || echo "," >> "$state_file"
+            cat >> "$state_file" << EOF
         {
             "window": $window_num,
             "name": "$agent_name",
             "role": "$agent_role"
         }
 EOF
-    done
-    
-    echo -e "\n    ]\n}" >> "$state_file"
+        done
+        echo -e "\n    ]\n}" >> "$state_file"
+    fi
     log "INFO" "ORCHESTRATOR" "State saved to $state_file"
 }

@@ -5,11 +5,15 @@
 # Create connection registry for tracking ports and endpoints
 create_connection_registry() {
     local registry_file="$ORCHESTRATOR_DIR/connections.json"
-    cat > "$registry_file" << 'EOF'
+    # Use current deployment env if set, else default to local
+    local deployment_env="${DEPLOYMENT_ENV:-local}"
+    cat > "$registry_file" << EOF
 {
+    "deployment_env": "${deployment_env}",
     "services": {},
     "endpoints": {},
     "ports": {},
+    "port_allocation": { "reserved": [] },
     "database_urls": {},
     "api_keys": {},
     "test_results": {},
@@ -28,6 +32,20 @@ create_port_helper() {
 
 ORCHESTRATOR_DIR="$(dirname "$0")"
 CONNECTIONS_FILE="$ORCHESTRATOR_DIR/connections.json"
+
+# Check if a port is in use (portable)
+is_port_in_use() {
+    local port="$1"
+    if command -v ss >/dev/null 2>&1; then
+        ss -lnt 2>/dev/null | awk '{print $4}' | grep -q ":$port$"
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -iTCP -sTCP:LISTEN -P 2>/dev/null | awk '{print $9}' | grep -q ":$port$"
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -ln 2>/dev/null | awk '{print $4}' | grep -q ":$port$"
+    else
+        return 1
+    fi
+}
 
 # Get deployment environment
 get_deployment_env() {
@@ -64,7 +82,7 @@ get_next_port() {
     fi
     
     for port in $(seq $start_port 9999); do
-        if ! echo "$reserved_ports" | grep -q "$port" && ! netstat -ln 2>/dev/null | grep -q ":$port "; then
+        if ! echo "$reserved_ports" | grep -q "\b$port\b" && ! is_port_in_use "$port"; then
             echo $port
             return
         fi
@@ -112,14 +130,17 @@ allocate_port() {
     fi
     
     # Check if preferred port is available
-    if netstat -ln 2>/dev/null | grep -q ":$preferred_port "; then
+    if is_port_in_use "$preferred_port"; then
         echo "Port $preferred_port is already in use, finding alternative" >&2
         preferred_port=$(get_next_port)
     fi
     
     # Update registry
     if command -v jq >/dev/null 2>&1; then
-        jq ".ports.\"$service\" = $preferred_port | .port_allocation.reserved += [$preferred_port]" "$CONNECTIONS_FILE" > /tmp/conn_update.json
+        # Ensure arrays exist, then append
+        jq \
+          ".ports.\"$service\" = $preferred_port | (.port_allocation // {reserved: []}) as \$pa | .port_allocation = (\$pa | .reserved = ((.reserved // []) + [$preferred_port]))" \
+          "$CONNECTIONS_FILE" > /tmp/conn_update.json
         mv /tmp/conn_update.json "$CONNECTIONS_FILE"
     else
         echo "Port $preferred_port allocated to $service" >> "$ORCHESTRATOR_DIR/port_allocation.log"

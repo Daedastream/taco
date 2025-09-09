@@ -55,7 +55,16 @@ send_to_agent() {
     
     # Determine target pane based on display mode
     local target_pane
-    if grep -q 'DISPLAY_MODE="panes"' "$(dirname "$0")/state.json" 2>/dev/null; then
+    local mode="windows"
+    if command -v jq >/dev/null 2>&1; then
+        mode=$(jq -r '.display_mode // "windows"' "$(dirname "$0")/state.json" 2>/dev/null)
+    else
+        if grep -q '"display_mode"[[:space:]]*:[[:space:]]*"panes"' "$(dirname "$0")/state.json" 2>/dev/null; then
+            mode="panes"
+        fi
+    fi
+
+    if [ "$mode" = "panes" ]; then
         if [ "$target_window" -eq 0 ]; then
             target_pane="$session_name:0.0"
         elif [ "$target_window" -eq 1 ]; then

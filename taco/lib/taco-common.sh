@@ -153,6 +153,7 @@ show_usage() {
     echo -e "${GREEN}Core Options:${NC}"
     echo "  -f, --file <path>       Load project from file"
     echo "  -p, --prompt <text>     Direct project description"
+    echo "  -m, --model <name>      Claude model (sonnet|opus)"
     echo "  -h, --help              Show this help"
     echo "  -v, --version           Show version"
     echo
@@ -190,10 +191,13 @@ show_version() {
 get_agent_command() {
     local agent_type="${TACO_AGENT_TYPE:-claude}"
     local agent_flags="${TACO_AGENT_FLAGS:-}"
+    local model_flag=""
+    [ -n "$TACO_CLAUDE_MODEL" ] && model_flag="--model $TACO_CLAUDE_MODEL"
     
     case "$agent_type" in
         claude)
-            echo "claude --dangerously-skip-permissions"
+            # Safe default; rely on interactive continuation for steady state
+            echo "claude --continue $model_flag"
             ;;
         codex)
             if [ -n "$agent_flags" ]; then
@@ -209,9 +213,21 @@ get_agent_command() {
                 echo "gemini"
             fi
             ;;
+        openai)
+            echo "openai"  # assumes an installed CLI; otherwise use multi-agent wrappers
+            ;;
+        anthropic_api)
+            echo "claude"  # fallback to Claude CLI for interactive; API wrapper available in multi-agent
+            ;;
+        llama)
+            echo "ollama run llama3:70b"
+            ;;
+        mistral)
+            echo "mistral-cli"
+            ;;
         *)
-            # Default to claude if unknown
-            echo "claude --dangerously-skip-permissions"
+            # Default to Claude if unknown
+            echo "claude --continue $model_flag"
             ;;
     esac
 }

@@ -1,14 +1,17 @@
-#!/opt/homebrew/bin/bash
+#!/usr/bin/env bash
 # TACO - Tmux Agent Command Orchestrator
 # Main executable that loads all modules
 
-# Find the installation directory
-if [ -L "$0" ]; then
-    # Follow symlink
-    TACO_HOME=$(dirname "$(readlink -f "$0")")/../
-else
-    TACO_HOME=$(dirname "$0")/../
-fi
+# Find the installation directory (portable symlink resolution)
+# Resolves the real path of this script even through symlinks
+__taco_source__="${BASH_SOURCE[0]}"
+while [ -h "$__taco_source__" ]; do
+  __taco_dir__="$(cd -P "$(dirname "$__taco_source__")" && pwd)"
+  __taco_source__="$(readlink "$__taco_source__")"
+  [[ "$__taco_source__" != /* ]] && __taco_source__="${__taco_dir__}/${__taco_source__}"
+done
+__taco_dir__="$(cd -P "$(dirname "$__taco_source__")" && pwd)"
+TACO_HOME="${__taco_dir__}/../"
 
 # Source all modules
 source "$TACO_HOME/lib/taco-common.sh"
@@ -29,6 +32,10 @@ done
 # Main execution starts here
 main() {
     # Check for command line arguments first (before loading settings)
+    # Load settings early so defaults (e.g., default agent/model) are available
+    if declare -F load_taco_settings >/dev/null 2>&1; then
+        load_taco_settings true
+    fi
     PROMPT_FILE=""
     SKIP_INTERACTIVE=false
     AGENT_TYPE="${TACO_DEFAULT_AGENT:-claude}"  # Default from settings
@@ -50,6 +57,11 @@ main() {
             -p|--prompt)
                 user_prompt="$2"
                 SKIP_INTERACTIVE=true
+                shift 2
+                ;;
+            -m|--model)
+                # Select Claude model (e.g., sonnet, opus)
+                export TACO_CLAUDE_MODEL="$2"
                 shift 2
                 ;;
             --codex)
@@ -88,10 +100,6 @@ main() {
             --cache)
                 CACHE_ENABLED=true
                 shift
-                ;;
-            --think)
-                THINKING_MODE="$2"
-                shift 2
                 ;;
             --mcp-servers)
                 MCP_SERVERS="$2"
