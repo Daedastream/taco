@@ -227,8 +227,10 @@ parse_agent_specification() {
         if [ -n "$json_block" ]; then
             # Strip markdown fences/backticks and trim
             json_block=$(printf '%s' "$json_block" | sed -E 's/^```.*$//g; s/^`+$//g; s/`+$//g')
-            # Drop obvious prompt prefixes that can leak into captures (e.g., cursh>, claude>, etc.)
-            json_block=$(printf '%s' "$json_block" | sed -E 's/^[A-Za-z_][A-Za-z0-9_]*> *//')
+            # Drop prompt-like prefixes per line (e.g., "cursh>", "claude>")
+            json_block=$(printf '%s' "$json_block" | awk '{ sub(/^[A-Za-z_][A-Za-z0-9_]*>[ ]*/, ""); print }')
+            # Write debug copy to inspect if needed
+            echo "$json_block" > "$ORCHESTRATOR_DIR/agent_spec_json_block.txt"
             # Normalize and parse
             local count
             count=$(printf '%s' "$json_block" | jq -r '(.agents // .Agents // .AGENTS) | length' 2>/dev/null || echo "")
@@ -247,7 +249,7 @@ parse_agent_specification() {
                 log "INFO" "PARSER" "Parsed ${#agent_specs[@]} agents from JSON specification"
                 return 0
             else
-                log "WARN" "PARSER" "JSON spec block present but not valid JSON agents array"
+                log "WARN" "PARSER" "JSON spec present but invalid; wrote sanitized block to $ORCHESTRATOR_DIR/agent_spec_json_block.txt"
             fi
         fi
     fi

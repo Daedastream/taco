@@ -93,6 +93,11 @@ main() {
                 CUSTOM_CONFIG="$2"
                 shift 2
                 ;;
+            --mother-agent)
+                # Force Mother agent type (default: claude)
+                MOTHER_AGENT_TYPE_OVERRIDE="$2"
+                shift 2
+                ;;
             --hybrid)
                 HYBRID_MODE=true
                 shift
@@ -224,6 +229,9 @@ main() {
     # Determine orchestrator vs worker agent types
     # Default: keep Mother as Claude for robust spec generation; workers use selected type
     MOTHER_AGENT_TYPE="${TACO_MOTHER_AGENT_TYPE:-claude}"
+    if [ -n "$MOTHER_AGENT_TYPE_OVERRIDE" ]; then
+        MOTHER_AGENT_TYPE="$MOTHER_AGENT_TYPE_OVERRIDE"
+    fi
     WORKER_AGENT_TYPE="$AGENT_TYPE"
     if [ "$AGENT_TYPE" = "claude" ]; then
         MOTHER_AGENT_TYPE="claude"
@@ -523,6 +531,7 @@ main() {
     tmux send-keys -t "$SESSION_NAME:0.0" "$(get_agent_command "$MOTHER_AGENT_TYPE")" Enter
     
     # Wait for Mother agent to start
+    echo -e "${YELLOW}Workers agent type: $WORKER_AGENT_TYPE${NC}"
     echo -e "${YELLOW}Waiting for $MOTHER_AGENT_TYPE to initialize...${NC}"
     sleep 5
     
