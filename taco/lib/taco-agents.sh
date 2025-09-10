@@ -274,9 +274,9 @@ parse_agent_specification() {
     fi
     
     while IFS= read -r line; do
-        # Strip ANSI codes, simple bullets, and trim whitespace (BSD sed-safe)
+        # Strip ANSI codes, simple bullets, and trim whitespace (BSD-safe)
         line=$(strip_ansi_codes "$line")
-        line=$(echo "$line" | sed -E 's/^[>\*\-•[:space:]]+//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+        line=$(printf '%s' "$line" | awk '{sub(/^[>*\- \t]+/, ""); sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print}')
         [ -z "$line" ] && continue
         
         # Normalize for case-insensitive matching
