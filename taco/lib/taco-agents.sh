@@ -227,8 +227,8 @@ parse_agent_specification() {
         if [ -n "$json_block" ]; then
             # Strip markdown fences/backticks and trim
             json_block=$(printf '%s' "$json_block" | sed -E 's/^```.*$//g; s/^`+$//g; s/`+$//g')
-            # Drop prompt-like prefixes per line (e.g., "cursh>", "claude>")
-            json_block=$(printf '%s' "$json_block" | awk '{ sub(/^[A-Za-z_][A-Za-z0-9_]*>[ ]*/, ""); print }')
+            # Drop prompt-like prefixes per line (e.g., "cursh>", "claude>") — tolerate repeated prefixes
+            json_block=$(printf '%s' "$json_block" | awk '{ while (sub(/^([A-Za-z_][A-Za-z0-9_]*>[ ]*)+/, "")) {}; print }')
             # Write debug copy to inspect if needed
             echo "$json_block" > "$ORCHESTRATOR_DIR/agent_spec_json_block.txt"
             # Normalize and parse
