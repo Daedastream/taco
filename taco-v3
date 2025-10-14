@@ -534,9 +534,11 @@ parse_json_spec() {
 
     # Extract JSON block between markers (take the LAST occurrence, not the first)
     # This avoids capturing the example JSON from the prompt
-    local json_block=$(tac "$spec_file" | \
+    # Use tail/sed instead of tac (which isn't on macOS by default)
+    local json_block=$(sed -n '/AGENT_SPEC_JSON_START/,/AGENT_SPEC_JSON_END/p' "$spec_file" | \
+                      tail -r | \
                       sed -n '/AGENT_SPEC_JSON_END/,/AGENT_SPEC_JSON_START/p' | \
-                      tac | \
+                      tail -r | \
                       grep -v "AGENT_SPEC_JSON" | \
                       sed 's/^[[:space:]]*//' | \
                       grep -v '^```' | \
