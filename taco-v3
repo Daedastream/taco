@@ -37,21 +37,27 @@ PROJECT_TYPE=""
 PROJECT_COMPLEXITY=""
 AGENT_COUNT="auto"
 
-# Beautiful ASCII TACO logo
+# Beautiful ASCII TACO logo with burgundy gradient
 show_taco_logo() {
     clear
     echo
     echo
-    echo -e "${BOLD}${CYAN}"
-    echo -e "    ████████╗  █████╗   ██████╗  ██████╗      ██╗   ██╗ ██████╗ "
-    echo -e "    ╚══██╔══╝ ██╔══██╗ ██╔════╝ ██╔═══██╗     ██║   ██║╚════██╗"
-    echo -e "       ██║    ███████║ ██║      ██║   ██║     ██║   ██║ █████╔╝"
-    echo -e "       ██║    ██╔══██║ ██║      ██║   ██║     ╚██╗ ██╔╝ ╚═══██╗"
-    echo -e "       ██║    ██║  ██║ ╚██████╗ ╚██████╔╝      ╚████╔╝ ██████╔╝"
-    echo -e "       ╚═╝    ╚═╝  ╚═╝  ╚═════╝  ╚═════╝        ╚═══╝  ╚═════╝ ${NC}"
+    # Burgundy gradient colors
+    local BURG1='\033[38;5;88m'   # Dark burgundy
+    local BURG2='\033[38;5;124m'  # Medium burgundy
+    local BURG3='\033[38;5;160m'  # Lighter burgundy
+    local BURG4='\033[38;5;196m'  # Light red-burgundy
+
+    echo -e "${BOLD}${BURG1}"
+    echo -e "    ████████╗  █████╗   ██████╗  ██████╗ "
+    echo -e "${BURG2}    ╚══██╔══╝ ██╔══██╗ ██╔════╝ ██╔═══██╗"
+    echo -e "${BURG2}       ██║    ███████║ ██║      ██║   ██║"
+    echo -e "${BURG3}       ██║    ██╔══██║ ██║      ██║   ██║"
+    echo -e "${BURG3}       ██║    ██║  ██║ ╚██████╗ ╚██████╔╝"
+    echo -e "${BURG4}       ╚═╝    ╚═╝  ╚═╝  ╚═════╝  ╚═════╝ ${NC}"
     echo
-    echo -e "${WHITE}              Tmux Agent Command Orchestrator v${VERSION}${NC}"
-    echo -e "${DIM}              Pure Bash • Zero Dependencies • Maximum Power${NC}"
+    echo -e "${BURG2}           Tmux Agent Command Orchestrator${NC}"
+    echo -e "${DIM}                Made by Daedastream LLC${NC}"
     echo
     echo
 }
@@ -373,24 +379,51 @@ parse_json_spec() {
 
     log INFO "Extracting JSON from Mother's output..."
 
-    # Extract JSON block
+    # Check if spec file exists and has content
+    if [ ! -f "$spec_file" ] || [ ! -s "$spec_file" ]; then
+        log ERROR "Specification file not found or empty"
+        return 1
+    fi
+
+    # Extract JSON block between markers
     local json_block=$(sed -n '/AGENT_SPEC_JSON_START/,/AGENT_SPEC_JSON_END/p' "$spec_file" | \
                       grep -v "AGENT_SPEC_JSON" | \
                       sed 's/^[[:space:]]*//' | \
                       grep -v '^```' | \
                       grep -v '^>' | \
+                      grep -v '^⏺' | \
                       tr -d '\r')
 
-    # Parse with jq
-    local agents_json=$(echo "$json_block" | jq -r '.agents' 2>/dev/null)
+    # Debug: Save extracted JSON to file
+    echo "$json_block" > "$PROJECT_DIR/.orchestrator/extracted_json.txt"
+
+    if [ -z "$json_block" ]; then
+        log ERROR "No JSON block found in specification"
+        log INFO "Check $PROJECT_DIR/.orchestrator/agent_spec.txt for raw output"
+        return 1
+    fi
+
+    # Try to parse with jq
+    local agents_json
+    if ! agents_json=$(echo "$json_block" | jq -r '.agents' 2>/dev/null); then
+        log ERROR "JSON parsing failed - invalid JSON syntax"
+        log INFO "Raw JSON saved to: $PROJECT_DIR/.orchestrator/extracted_json.txt"
+        return 1
+    fi
 
     if [ -z "$agents_json" ] || [ "$agents_json" = "null" ]; then
-        log ERROR "Failed to parse JSON specification"
+        log ERROR "No agents array found in JSON specification"
+        log INFO "Raw JSON saved to: $PROJECT_DIR/.orchestrator/extracted_json.txt"
         return 1
     fi
 
     # Parse each agent
-    local count=$(echo "$agents_json" | jq 'length')
+    local count=$(echo "$agents_json" | jq 'length' 2>/dev/null)
+
+    if [ -z "$count" ] || [ "$count" -eq 0 ]; then
+        log ERROR "Agents array is empty"
+        return 1
+    fi
 
     log SUCCESS "Found ${BOLD}$count agents${NC}"
     echo
