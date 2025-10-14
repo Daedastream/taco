@@ -6,10 +6,11 @@ set -euo pipefail
 
 VERSION="3.0.0"
 SESSION_NAME="taco"
-CLAUDE_MODEL="sonnet"
+CLAUDE_MODEL="sonnet"  # Always use sonnet
 PROJECT_PROMPT=""
 PROJECT_DIR=""
 DEBUG=false
+QUICK_MODE=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/taco/templates"
 
@@ -168,7 +169,7 @@ run_questionnaire() {
     echo
 
     # Question 1: Project Type
-    show_step 1 4 "What type of project are you building?"
+    show_step 1 3 "What type of project are you building?"
     echo
     echo -e "  ${BOLD}1)${NC} ${CYAN}Web Application${NC} ${DIM}(Frontend + Backend)${NC}"
     echo -e "  ${BOLD}2)${NC} ${CYAN}Mobile App${NC} ${DIM}(iOS, Android, or React Native)${NC}"
@@ -191,7 +192,7 @@ run_questionnaire() {
     show_success "Project type: ${BOLD}$PROJECT_TYPE${NC}"
 
     # Question 2: Complexity
-    show_step 2 4 "What's the complexity level?"
+    show_step 2 3 "What's the complexity level?"
     echo
     echo -e "  ${BOLD}1)${NC} ${GREEN}Simple${NC} ${DIM}(Single file, basic functionality)${NC}"
     echo -e "  ${BOLD}2)${NC} ${CYAN}Moderate${NC} ${DIM}(Multiple files, some features)${NC}"
@@ -211,7 +212,7 @@ run_questionnaire() {
     show_success "Complexity: ${BOLD}$PROJECT_COMPLEXITY${NC} ${DIM}(~$AGENT_COUNT agents)${NC}"
 
     # Question 3: Description
-    show_step 3 4 "Describe your project"
+    show_step 3 3 "Describe your project"
     echo
     echo -e "${DIM}Be as detailed as you want. Press Enter twice when done.${NC}"
     echo
@@ -237,21 +238,42 @@ run_questionnaire() {
     done
 
     PROJECT_PROMPT=$(printf '%s\n' "${lines[@]}")
+}
 
-    # Question 4: Model selection
-    show_step 4 4 "Which Claude model?"
+# Quick mode - just get description
+get_quick_description() {
+    section_header "QUICK START"
+
+    echo -e "${WHITE}Describe your project:${NC}"
+    echo -e "${DIM}(Press Enter twice when done)${NC}"
     echo
-    echo -e "  ${BOLD}1)${NC} ${CYAN}Sonnet${NC} ${DIM}(Recommended - Fast & Capable)${NC}"
-    echo -e "  ${BOLD}2)${NC} ${MAGENTA}Opus${NC} ${DIM}(Most Powerful)${NC}"
-    echo
-    read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-2, default 1]): " model_choice
 
-    case $model_choice in
-        2) CLAUDE_MODEL="opus" ;;
-        *) CLAUDE_MODEL="sonnet" ;;
-    esac
+    local lines=()
+    local empty_count=0
 
-    show_success "Model: ${BOLD}$CLAUDE_MODEL${NC}"
+    while true; do
+        if [ ${#lines[@]} -eq 0 ]; then
+            read -r -p "$(echo -e ${CYAN}❯${NC} ) " line
+        else
+            read -r -p "$(echo -e ${DIM}│${NC} ) " line
+        fi
+
+        if [ -z "$line" ]; then
+            empty_count=$((empty_count + 1))
+            [ $empty_count -ge 2 ] && break
+            [ $empty_count -ge 1 ] && [ ${#lines[@]} -gt 0 ] && break
+        else
+            empty_count=0
+            lines+=("$line")
+        fi
+    done
+
+    PROJECT_PROMPT=$(printf '%s\n' "${lines[@]}")
+
+    # Auto-detect settings
+    PROJECT_TYPE="Auto-detected"
+    PROJECT_COMPLEXITY="Auto-detected"
+    AGENT_COUNT="auto"
 }
 
 # Show configuration summary
@@ -261,11 +283,10 @@ show_configuration() {
     echo -e "${BOLD}${WHITE}Project Details:${NC}"
     echo -e "  ${CYAN}●${NC} Type:       ${BOLD}$PROJECT_TYPE${NC}"
     echo -e "  ${CYAN}●${NC} Complexity: ${BOLD}$PROJECT_COMPLEXITY${NC}"
-    echo -e "  ${CYAN}●${NC} Model:      ${BOLD}Claude $CLAUDE_MODEL${NC}"
     if [ "$AGENT_COUNT" != "auto" ]; then
         echo -e "  ${CYAN}●${NC} Agents:     ${BOLD}~$AGENT_COUNT agents${NC}"
     else
-        echo -e "  ${CYAN}●${NC} Agents:     ${BOLD}Auto-determined${NC}"
+        echo -e "  ${CYAN}●${NC} Agents:     ${BOLD}Auto-determined by Mother${NC}"
     fi
     echo
     echo -e "${BOLD}${WHITE}Description:${NC}"
@@ -467,9 +488,6 @@ parse_json_spec() {
 create_agent_windows() {
     section_header "SPAWNING AGENTS"
 
-    local model_flag=""
-    [ -n "$CLAUDE_MODEL" ] && model_flag="--model $CLAUDE_MODEL"
-
     local total=${#AGENT_NAMES[@]}
 
     for ((i=0; i<total; i++)); do
@@ -484,8 +502,8 @@ create_agent_windows() {
         # Create window
         tmux new-window -t "${SESSION_NAME}:${window}" -n "$name" -c "$PROJECT_DIR" 2>/dev/null || true
 
-        # Start Claude
-        tmux send-keys -t "${SESSION_NAME}:${window}.0" "claude --dangerously-skip-permissions $model_flag" Enter
+        # Start Claude (always default model)
+        tmux send-keys -t "${SESSION_NAME}:${window}.0" "claude --dangerously-skip-permissions" Enter
         sleep 3
 
         # Accept trust
@@ -582,9 +600,9 @@ main() {
                 PROJECT_PROMPT="$2"
                 shift 2
                 ;;
-            -m|--model)
-                CLAUDE_MODEL="$2"
-                shift 2
+            -q|--quick)
+                QUICK_MODE=true
+                shift
                 ;;
             --session-name)
                 SESSION_NAME="$2"
@@ -595,7 +613,24 @@ main() {
                 exit 0
                 ;;
             -h|--help)
-                echo "Usage: $0 [-f FILE] [-p PROMPT] [-m MODEL] [--session-name NAME]"
+                cat <<EOF
+Usage: $0 [OPTIONS]
+
+Options:
+    -f, --file FILE         Load project from file
+    -p, --prompt TEXT       Project description (skip all prompts)
+    -q, --quick             Quick mode (just description, auto-detect rest)
+    --session-name NAME     Custom tmux session name [default: taco]
+    -v, --version           Show version
+    -h, --help              Show this help
+
+Examples:
+    $0                      # Interactive with questionnaire
+    $0 -q                   # Quick mode (just description)
+    $0 -p "Build a chat app" # Skip all prompts
+    $0 -f project.txt       # Load from file
+
+EOF
                 exit 0
                 ;;
             *)
@@ -611,9 +646,13 @@ main() {
     # Check dependencies
     check_dependencies
 
-    # Run questionnaire if no prompt provided
+    # Get project description
     if [ -z "$PROJECT_PROMPT" ]; then
-        run_questionnaire
+        if [ "$QUICK_MODE" = true ]; then
+            get_quick_description
+        else
+            run_questionnaire
+        fi
         show_configuration
     fi
 
@@ -635,12 +674,11 @@ main() {
     # Start Mother
     section_header "LAUNCHING MOTHER AGENT"
 
-    log INFO "Starting Claude $CLAUDE_MODEL in Mother window..."
+    log INFO "Starting Claude in Mother window..."
     local target="${SESSION_NAME}:0.0"
-    local model_flag=""
-    [ -n "$CLAUDE_MODEL" ] && model_flag="--model $CLAUDE_MODEL"
 
-    tmux send-keys -t "$target" "claude --dangerously-skip-permissions $model_flag" Enter
+    # Always use default model (no flag = sonnet)
+    tmux send-keys -t "$target" "claude --dangerously-skip-permissions" Enter
     sleep 5
 
     log INFO "Accepting security prompt..."
