@@ -17,7 +17,13 @@ TEMPLATES_DIR="$SCRIPT_DIR/taco/templates"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+GRAY='\033[0;90m'
+BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 # Agents array
@@ -26,57 +32,211 @@ declare -a AGENT_NAMES
 declare -a AGENT_WINDOWS
 declare -a AGENT_ROLES
 
+# Questionnaire answers
+PROJECT_TYPE=""
+PROJECT_COMPLEXITY=""
+AGENT_COUNT="auto"
+
+# Beautiful ASCII TACO logo
+show_taco_logo() {
+    clear
+    cat <<'EOF'
+
+
+           ██████████████████████████████████████████████████████
+         ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██
+       ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██
+      ██░░░░░░▓▓▓▓▓▓░░░░░░░▒▒▒▒▒▒░░░░░░░▓▓▓▓▓▓░░░░░░░▒▒▒▒▒▒░░░░░░██
+     ██░░░░░░▓▓████▓▓░░░░░▒▒████▒▒░░░░░▓▓████▓▓░░░░░▒▒████▒▒░░░░░░██
+    ██░░░░░░░▓▓████▓▓░░░░░▒▒████▒▒░░░░░▓▓████▓▓░░░░░▒▒████▒▒░░░░░░░██
+    ██░░░░░░░░▓▓▓▓▓▓░░░░░░░▒▒▒▒▒▒░░░░░░░▓▓▓▓▓▓░░░░░░░▒▒▒▒▒▒░░░░░░░░██
+    ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██
+     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██
+      ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██
+       ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██
+         ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██
+           ██████████████████████████████████████████████████████
+
+EOF
+
+    # Gradient title
+    echo -e "${BOLD}"
+    echo -e "    ███████╗ █████╗  ██████╗  ██████╗     ██╗   ██╗ ██████╗ "
+    echo -e "    ╚══██╔══╝██╔══██╗██╔════╝ ██╔═══██╗    ██║   ██║╚════██╗"
+    echo -e "       ██║   ███████║██║      ██║   ██║    ██║   ██║ █████╔╝"
+    echo -e "       ██║   ██╔══██║██║      ██║   ██║    ╚██╗ ██╔╝ ╚═══██╗"
+    echo -e "       ██║   ██║  ██║╚██████╗ ╚██████╔╝     ╚████╔╝ ██████╔╝"
+    echo -e "       ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝       ╚═══╝  ╚═════╝ ${NC}"
+    echo
+    echo -e "${CYAN}              Tmux Agent Command Orchestrator v${VERSION}${NC}"
+    echo -e "${DIM}              Pure Bash • Zero Dependencies • Maximum Power${NC}"
+    echo
+}
+
+# Progress spinner
+spinner() {
+    local pid=$1
+    local message=$2
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+
+    while kill -0 $pid 2>/dev/null; do
+        local temp=${spinstr#?}
+        printf " ${CYAN}%c${NC}  %s" "$spinstr" "$message"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep 0.1
+        printf "\r"
+    done
+    printf "    \r"
+}
+
+# Beautiful section header
+section_header() {
+    local title="$1"
+    echo
+    echo -e "${BOLD}${WHITE}╔════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${WHITE}║${NC}  ${BOLD}${CYAN}$title${NC}"
+    echo -e "${BOLD}${WHITE}╚════════════════════════════════════════════════════════════════════╝${NC}"
+    echo
+}
+
+# Step indicator
+show_step() {
+    local current=$1
+    local total=$2
+    local title="$3"
+
+    echo
+    echo -e "${BOLD}${MAGENTA}▶${NC} ${BOLD}Step $current/$total:${NC} ${WHITE}$title${NC}"
+    echo -e "${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+# Success message
+show_success() {
+    echo -e "${GREEN}✓${NC} $*"
+}
+
+# Info message
+show_info() {
+    echo -e "${CYAN}ℹ${NC} $*"
+}
+
+# Warning message
+show_warn() {
+    echo -e "${YELLOW}⚠${NC} $*"
+}
+
+# Progress bar
+progress_bar() {
+    local current=$1
+    local total=$2
+    local width=50
+    local percentage=$((current * 100 / total))
+    local filled=$((width * current / total))
+    local empty=$((width - filled))
+
+    printf "\r${CYAN}["
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%${empty}s" | tr ' ' '░'
+    printf "]${NC} ${BOLD}%3d%%${NC}" $percentage
+}
+
 # Check dependencies
 check_dependencies() {
+    section_header "SYSTEM CHECK"
+
     local missing=()
-    command -v tmux >/dev/null 2>&1 || missing+=("tmux")
-    command -v claude >/dev/null 2>&1 || missing+=("claude")
-    command -v jq >/dev/null 2>&1 || missing+=("jq")
-    
+    local deps=("tmux" "claude" "jq" "envsubst")
+    local total=${#deps[@]}
+    local current=0
+
+    for dep in "${deps[@]}"; do
+        current=$((current + 1))
+        if command -v "$dep" >/dev/null 2>&1; then
+            show_success "${BOLD}$dep${NC} is installed $(command -v $dep)"
+        else
+            show_warn "${BOLD}$dep${NC} is ${RED}missing${NC}"
+            missing+=("$dep")
+        fi
+    done
+
     if [ ${#missing[@]} -gt 0 ]; then
-        echo -e "${RED}Error: Missing dependencies: ${missing[*]}${NC}" >&2
-        echo "Install with: brew install ${missing[*]}" >&2
+        echo
+        echo -e "${RED}${BOLD}✗ Missing dependencies:${NC} ${missing[*]}"
+        echo -e "${YELLOW}Install with:${NC} ${BOLD}brew install ${missing[*]}${NC}"
         exit 1
     fi
+
+    echo
+    show_success "${BOLD}All dependencies satisfied!${NC}"
+    sleep 1
 }
 
-# Logger
-log() {
-    local level="$1"
-    shift
-    local msg="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
-    case "$level" in
-        INFO) echo -e "${timestamp} [${GREEN}INFO${NC}] $msg" >&2 ;;
-        WARN) echo -e "${timestamp} [${YELLOW}WARN${NC}] $msg" >&2 ;;
-        ERROR) echo -e "${timestamp} [${RED}ERROR${NC}] $msg" >&2 ;;
+# Interactive questionnaire
+run_questionnaire() {
+    section_header "PROJECT QUESTIONNAIRE"
+
+    echo -e "${WHITE}Let's gather some details about your project...${NC}"
+    echo
+
+    # Question 1: Project Type
+    show_step 1 4 "What type of project are you building?"
+    echo
+    echo -e "  ${BOLD}1)${NC} ${CYAN}Web Application${NC} ${DIM}(Frontend + Backend)${NC}"
+    echo -e "  ${BOLD}2)${NC} ${CYAN}Mobile App${NC} ${DIM}(iOS, Android, or React Native)${NC}"
+    echo -e "  ${BOLD}3)${NC} ${CYAN}API/Backend Service${NC} ${DIM}(REST, GraphQL, Microservices)${NC}"
+    echo -e "  ${BOLD}4)${NC} ${CYAN}CLI Tool${NC} ${DIM}(Command-line utility)${NC}"
+    echo -e "  ${BOLD}5)${NC} ${CYAN}Data/ML Pipeline${NC} ${DIM}(ETL, Machine Learning)${NC}"
+    echo -e "  ${BOLD}6)${NC} ${CYAN}Other${NC} ${DIM}(I'll describe it)${NC}"
+    echo
+    read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-6]): " project_type_choice
+
+    case $project_type_choice in
+        1) PROJECT_TYPE="Web Application" ;;
+        2) PROJECT_TYPE="Mobile App" ;;
+        3) PROJECT_TYPE="API/Backend Service" ;;
+        4) PROJECT_TYPE="CLI Tool" ;;
+        5) PROJECT_TYPE="Data/ML Pipeline" ;;
+        *) PROJECT_TYPE="Other" ;;
     esac
-}
 
-# Show logo
-show_logo() {
-    cat <<'EOF'
-╔════════════════════════════════════════════════╗
-║      TACO v3.0 - Pure Bash Edition             ║
-╚════════════════════════════════════════════════╝
-EOF
-}
+    show_success "Project type: ${BOLD}$PROJECT_TYPE${NC}"
 
-# Get interactive prompt
-get_interactive_prompt() {
-    show_logo
+    # Question 2: Complexity
+    show_step 2 4 "What's the complexity level?"
     echo
-    echo -e "${YELLOW}💬 What would you like to build?${NC}"
-    echo -e "${CYAN}   (Describe your project, then press Enter twice)${NC}"
+    echo -e "  ${BOLD}1)${NC} ${GREEN}Simple${NC} ${DIM}(Single file, basic functionality)${NC}"
+    echo -e "  ${BOLD}2)${NC} ${CYAN}Moderate${NC} ${DIM}(Multiple files, some features)${NC}"
+    echo -e "  ${BOLD}3)${NC} ${YELLOW}Complex${NC} ${DIM}(Full-stack, many features)${NC}"
+    echo -e "  ${BOLD}4)${NC} ${MAGENTA}Enterprise${NC} ${DIM}(Multi-platform, microservices)${NC}"
     echo
-    
+    read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-4]): " complexity_choice
+
+    case $complexity_choice in
+        1) PROJECT_COMPLEXITY="Simple"; AGENT_COUNT=2 ;;
+        2) PROJECT_COMPLEXITY="Moderate"; AGENT_COUNT=4 ;;
+        3) PROJECT_COMPLEXITY="Complex"; AGENT_COUNT=7 ;;
+        4) PROJECT_COMPLEXITY="Enterprise"; AGENT_COUNT=10 ;;
+        *) PROJECT_COMPLEXITY="Moderate"; AGENT_COUNT="auto" ;;
+    esac
+
+    show_success "Complexity: ${BOLD}$PROJECT_COMPLEXITY${NC} ${DIM}(~$AGENT_COUNT agents)${NC}"
+
+    # Question 3: Description
+    show_step 3 4 "Describe your project"
+    echo
+    echo -e "${DIM}Be as detailed as you want. Press Enter twice when done.${NC}"
+    echo
+
     local lines=()
     local empty_count=0
-    
+
     while true; do
-        read -r -p "│  " line || break
-        
+        if [ ${#lines[@]} -eq 0 ]; then
+            read -r -p "$(echo -e ${CYAN}❯${NC} ) " line
+        else
+            read -r -p "$(echo -e ${DIM}│${NC} ) " line
+        fi
+
         if [ -z "$line" ]; then
             empty_count=$((empty_count + 1))
             [ $empty_count -ge 2 ] && break
@@ -86,9 +246,71 @@ get_interactive_prompt() {
             lines+=("$line")
         fi
     done
-    
+
+    PROJECT_PROMPT=$(printf '%s\n' "${lines[@]}")
+
+    # Question 4: Model selection
+    show_step 4 4 "Which Claude model?"
     echo
-    printf '%s\n' "${lines[@]}"
+    echo -e "  ${BOLD}1)${NC} ${CYAN}Sonnet${NC} ${DIM}(Recommended - Fast & Capable)${NC}"
+    echo -e "  ${BOLD}2)${NC} ${MAGENTA}Opus${NC} ${DIM}(Most Powerful)${NC}"
+    echo
+    read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-2, default 1]): " model_choice
+
+    case $model_choice in
+        2) CLAUDE_MODEL="opus" ;;
+        *) CLAUDE_MODEL="sonnet" ;;
+    esac
+
+    show_success "Model: ${BOLD}$CLAUDE_MODEL${NC}"
+}
+
+# Show configuration summary
+show_configuration() {
+    section_header "CONFIGURATION SUMMARY"
+
+    echo -e "${BOLD}${WHITE}Project Details:${NC}"
+    echo -e "  ${CYAN}●${NC} Type:       ${BOLD}$PROJECT_TYPE${NC}"
+    echo -e "  ${CYAN}●${NC} Complexity: ${BOLD}$PROJECT_COMPLEXITY${NC}"
+    echo -e "  ${CYAN}●${NC} Model:      ${BOLD}Claude $CLAUDE_MODEL${NC}"
+    if [ "$AGENT_COUNT" != "auto" ]; then
+        echo -e "  ${CYAN}●${NC} Agents:     ${BOLD}~$AGENT_COUNT agents${NC}"
+    else
+        echo -e "  ${CYAN}●${NC} Agents:     ${BOLD}Auto-determined${NC}"
+    fi
+    echo
+    echo -e "${BOLD}${WHITE}Description:${NC}"
+    echo "$PROJECT_PROMPT" | sed 's/^/  │ /'
+    echo
+
+    read -r -p "$(echo -e ${YELLOW}Continue? [Y/n]:${NC} )" confirm
+    if [[ "$confirm" =~ ^[Nn]$ ]]; then
+        echo -e "${RED}Aborted by user${NC}"
+        exit 0
+    fi
+}
+
+# Enhanced logger
+log() {
+    local level="$1"
+    shift
+    local msg="$*"
+    local timestamp=$(date '+%H:%M:%S')
+
+    case "$level" in
+        INFO)
+            echo -e "${DIM}[$timestamp]${NC} ${GREEN}●${NC} $msg"
+            ;;
+        WARN)
+            echo -e "${DIM}[$timestamp]${NC} ${YELLOW}⚠${NC} $msg"
+            ;;
+        ERROR)
+            echo -e "${DIM}[$timestamp]${NC} ${RED}✗${NC} $msg"
+            ;;
+        SUCCESS)
+            echo -e "${DIM}[$timestamp]${NC} ${GREEN}✓${NC} $msg"
+            ;;
+    esac
 }
 
 # Create Mother prompt from template
@@ -104,7 +326,7 @@ create_agent_prompt() {
     local role="$3"
     local depends="$4"
     local notifies="$5"
-    
+
     AGENT_NAME="$name" \
     AGENT_WINDOW="$window" \
     AGENT_ROLE="$role" \
@@ -113,41 +335,61 @@ create_agent_prompt() {
     envsubst < "$TEMPLATES_DIR/agent-prompt.txt"
 }
 
-# Wait for specification with timeout
+# Wait for specification with beautiful progress
 wait_for_specification() {
     local target="${SESSION_NAME}:0.0"
     local spec_file="$PROJECT_DIR/.orchestrator/agent_spec.txt"
     local timeout=180
     local elapsed=0
     local wait_time=2
-    
-    log INFO "📋 Waiting for Mother to generate specification..."
-    
+
+    section_header "WAITING FOR MOTHER'S ANALYSIS"
+
+    echo -e "${WHITE}Mother is analyzing your project and designing the agent architecture...${NC}"
+    echo
+
+    local phases=("Analyzing requirements" "Decomposing work units" "Designing agent architecture" "Mapping dependencies")
+    local phase_idx=0
+
     while [ $elapsed -lt $timeout ]; do
         # Capture pane content
         tmux capture-pane -t "$target" -p -S -3000 > "$spec_file" 2>/dev/null || true
-        
+
         # Check for completion markers
         if grep -q "<<<DONE>>>" "$spec_file" && \
            grep -q "AGENT_SPEC_JSON_START" "$spec_file" && \
            grep -q "Begin your analysis and design now" "$spec_file"; then
-            log INFO "✅ Specification received!"
+            echo
+            log SUCCESS "${BOLD}Specification received!${NC}"
             return 0
         fi
-        
-        echo -ne "\r${CYAN}Waiting... ${elapsed}s${NC}" >&2
+
+        # Show rotating phase
+        local current_phase="${phases[$phase_idx]}"
+        printf "\r  ${CYAN}◆${NC} %-40s ${DIM}[%3ds]${NC}" "$current_phase" "$elapsed"
+
+        # Advance phase every 10 seconds
+        if [ $((elapsed % 10)) -eq 0 ] && [ $elapsed -gt 0 ]; then
+            phase_idx=$(( (phase_idx + 1) % ${#phases[@]} ))
+        fi
+
         sleep $wait_time
         elapsed=$((elapsed + wait_time))
     done
-    
+
+    echo
     log ERROR "Timeout waiting for specification"
     return 1
 }
 
-# Parse JSON specification using jq
+# Parse JSON specification
 parse_json_spec() {
     local spec_file="$1"
-    
+
+    section_header "PARSING AGENT SPECIFICATION"
+
+    log INFO "Extracting JSON from Mother's output..."
+
     # Extract JSON block
     local json_block=$(sed -n '/AGENT_SPEC_JSON_START/,/AGENT_SPEC_JSON_END/p' "$spec_file" | \
                       grep -v "AGENT_SPEC_JSON" | \
@@ -155,101 +397,147 @@ parse_json_spec() {
                       grep -v '^```' | \
                       grep -v '^>' | \
                       tr -d '\r')
-    
+
     # Parse with jq
     local agents_json=$(echo "$json_block" | jq -r '.agents' 2>/dev/null)
-    
+
     if [ -z "$agents_json" ] || [ "$agents_json" = "null" ]; then
+        log ERROR "Failed to parse JSON specification"
         return 1
     fi
-    
+
     # Parse each agent
     local count=$(echo "$agents_json" | jq 'length')
-    
+
+    log SUCCESS "Found ${BOLD}$count agents${NC}"
+    echo
+
     for ((i=0; i<count; i++)); do
         local agent=$(echo "$agents_json" | jq ".[$i]")
         local window=$(echo "$agent" | jq -r '.window')
         local name=$(echo "$agent" | jq -r '.name')
         local role=$(echo "$agent" | jq -r '.role')
-        
+
         AGENT_WINDOWS+=("$window")
         AGENT_NAMES+=("$name")
         AGENT_ROLES+=("$role")
+
+        echo -e "  ${CYAN}◆${NC} ${BOLD}$name${NC} ${DIM}(window $window)${NC}"
+        echo -e "    ${DIM}$role${NC}"
     done
-    
-    log INFO "Parsed ${#AGENT_NAMES[@]} agents"
+
+    echo
     return 0
 }
 
-# Create agent windows
+# Create agent windows with beautiful progress
 create_agent_windows() {
+    section_header "SPAWNING AGENTS"
+
     local model_flag=""
     [ -n "$CLAUDE_MODEL" ] && model_flag="--model $CLAUDE_MODEL"
-    
-    for ((i=0; i<${#AGENT_NAMES[@]}; i++)); do
+
+    local total=${#AGENT_NAMES[@]}
+
+    for ((i=0; i<total; i++)); do
         local window="${AGENT_WINDOWS[$i]}"
         local name="${AGENT_NAMES[$i]}"
         local role="${AGENT_ROLES[$i]}"
-        
-        log INFO "Creating agent: $name (window $window)"
-        
+
+        progress_bar $((i + 1)) $total
+        echo
+        log INFO "Spawning ${BOLD}$name${NC} in window $window..."
+
         # Create window
-        tmux new-window -t "${SESSION_NAME}:${window}" -n "$name" -c "$PROJECT_DIR"
-        
+        tmux new-window -t "${SESSION_NAME}:${window}" -n "$name" -c "$PROJECT_DIR" 2>/dev/null || true
+
         # Start Claude
         tmux send-keys -t "${SESSION_NAME}:${window}.0" "claude --dangerously-skip-permissions $model_flag" Enter
-        sleep 5
-        
+        sleep 3
+
         # Accept trust
         tmux send-keys -t "${SESSION_NAME}:${window}.0" "1" Enter
-        sleep 2
-        
+        sleep 1
+
         # Send agent prompt
         local prompt=$(create_agent_prompt "$name" "$window" "$role" "none" "none")
         printf '%s' "$prompt" | tmux load-buffer -
         tmux paste-buffer -t "${SESSION_NAME}:${window}.0"
-        sleep 0.5
+        sleep 0.3
         tmux send-keys -t "${SESSION_NAME}:${window}.0" Enter
+
+        show_success "Agent ${BOLD}$name${NC} is ready"
     done
-    
-    log INFO "All agents created"
+
+    echo
+    log SUCCESS "${BOLD}All $total agents spawned!${NC}"
 }
 
 # Send coordination prompt
 send_coordination_prompt() {
+    section_header "ACTIVATING COORDINATION MODE"
+
     local target="${SESSION_NAME}:0.0"
-    
+
+    log INFO "Building agent roster..."
+
     # Build agents info
     local agents_info=""
     for ((i=0; i<${#AGENT_NAMES[@]}; i++)); do
         agents_info+="  Window ${AGENT_WINDOWS[$i]}: ${AGENT_NAMES[$i]}\n"
         agents_info+="    Role: ${AGENT_ROLES[$i]}\n\n"
     done
-    
+
     # Load and substitute template
     AGENTS_INFO="$agents_info" \
     PROJECT_DIR="$PROJECT_DIR" \
     envsubst < "$TEMPLATES_DIR/coordination-prompt.txt" > /tmp/coord_prompt.txt
-    
+
+    log INFO "Sending coordination protocol to Mother..."
+
     # Send to Mother
-    log INFO "🎯 Sending coordination prompt to Mother..."
     tmux send-keys -t "$target" C-u
     sleep 0.5
-    
+
     cat /tmp/coord_prompt.txt | tmux load-buffer -
     tmux paste-buffer -t "$target"
     sleep 0.5
     tmux send-keys -t "$target" Enter
-    
+
     rm -f /tmp/coord_prompt.txt
+
+    log SUCCESS "Mother is now in ${BOLD}COORDINATION MODE${NC}"
+}
+
+# Final launch sequence
+launch_sequence() {
+    section_header "LAUNCH SEQUENCE"
+
+    echo -e "${WHITE}${BOLD}System Status:${NC}"
+    echo -e "  ${GREEN}✓${NC} Project:    $PROJECT_DIR"
+    echo -e "  ${GREEN}✓${NC} Session:    $SESSION_NAME"
+    echo -e "  ${GREEN}✓${NC} Mother:     Window 0 (Coordinating)"
+    echo -e "  ${GREEN}✓${NC} Agents:     ${#AGENT_NAMES[@]} agents spawned"
+    echo -e "  ${GREEN}✓${NC} Mode:       Full orchestration active"
+    echo
+
+    echo -e "${CYAN}${BOLD}Navigation:${NC}"
+    echo -e "  ${DIM}◆${NC} Ctrl+b 0-9  ${DIM}→${NC} Jump to window"
+    echo -e "  ${DIM}◆${NC} Ctrl+b n    ${DIM}→${NC} Next window"
+    echo -e "  ${DIM}◆${NC} Ctrl+b d    ${DIM}→${NC} Detach (keeps running)"
+    echo
+
+    for i in 3 2 1; do
+        echo -ne "\r${GREEN}${BOLD}Attaching to session in ${i}...${NC}"
+        sleep 1
+    done
+    echo
+    echo
 }
 
 # Main orchestration flow
 main() {
-    # Check deps
-    check_dependencies
-    
-    # Parse args
+    # Parse args first
     while [[ $# -gt 0 ]]; do
         case $1 in
             -f|--file)
@@ -283,64 +571,76 @@ main() {
                 ;;
         esac
     done
-    
-    # Get prompt if not provided
-    [ -z "$PROJECT_PROMPT" ] && PROJECT_PROMPT=$(get_interactive_prompt)
+
+    # Show beautiful logo
+    show_taco_logo
+
+    # Check dependencies
+    check_dependencies
+
+    # Run questionnaire if no prompt provided
+    if [ -z "$PROJECT_PROMPT" ]; then
+        run_questionnaire
+        show_configuration
+    fi
+
     [ -z "$PROJECT_PROMPT" ] && { log ERROR "No project description"; exit 1; }
-    
+
     # Setup
-    log INFO "⚡ TACO Bash v3 initialized"
-    
-    # Create project dir
+    section_header "INITIALIZING TACO"
+
+    log INFO "Setting up project workspace..."
     PROJECT_DIR="$(pwd)/taco-project-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$PROJECT_DIR/.orchestrator"
-    log INFO "📁 Project: $PROJECT_DIR"
-    
-    # Start tmux
+    show_success "Project directory: ${BOLD}$PROJECT_DIR${NC}"
+
+    log INFO "Creating tmux session..."
     tmux has-session -t "$SESSION_NAME" 2>/dev/null && tmux kill-session -t "$SESSION_NAME"
     tmux new-session -d -s "$SESSION_NAME" -n "mother" -c "$PROJECT_DIR"
-    log INFO "🖥️  Session: $SESSION_NAME"
-    
+    show_success "Session: ${BOLD}$SESSION_NAME${NC}"
+
     # Start Mother
-    log INFO "🤖 Starting Mother agent..."
+    section_header "LAUNCHING MOTHER AGENT"
+
+    log INFO "Starting Claude $CLAUDE_MODEL in Mother window..."
     local target="${SESSION_NAME}:0.0"
     local model_flag=""
     [ -n "$CLAUDE_MODEL" ] && model_flag="--model $CLAUDE_MODEL"
-    
+
     tmux send-keys -t "$target" "claude --dangerously-skip-permissions $model_flag" Enter
     sleep 5
+
+    log INFO "Accepting security prompt..."
     tmux send-keys -t "$target" "1" Enter
     sleep 2
-    
-    # Send Mother prompt
+
+    log INFO "Transmitting project requirements..."
     local mother_prompt=$(create_mother_prompt "$PROJECT_PROMPT")
     printf '%s' "$mother_prompt" | tmux load-buffer -
     tmux paste-buffer -t "$target"
     sleep 0.5
     tmux send-keys -t "$target" Enter
-    
+
+    show_success "Mother agent is ${BOLD}ANALYZING${NC}"
+
     # Wait for spec
     wait_for_specification || exit 1
-    
+
     # Parse spec
-    parse_json_spec "$PROJECT_DIR/.orchestrator/agent_spec.txt" || {
-        log ERROR "Failed to parse specification"
-        exit 1
-    }
-    
+    parse_json_spec "$PROJECT_DIR/.orchestrator/agent_spec.txt" || exit 1
+
     # Create agents
+    sleep 2
     create_agent_windows
-    
+
     # Send coordination
-    sleep 10
+    sleep 5
     send_coordination_prompt
-    
-    # Done
-    log INFO "🎉 Orchestration complete!"
-    echo
-    echo -e "${GREEN}Attaching to session in 3 seconds...${NC}"
-    sleep 3
-    
+
+    # Launch!
+    sleep 2
+    launch_sequence
+
     tmux attach -t "${SESSION_NAME}:0"
 }
 
