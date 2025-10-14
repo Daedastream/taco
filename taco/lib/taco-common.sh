@@ -207,7 +207,7 @@ get_agent_command() {
     case "$agent_type" in
         claude)
             # Safe default; rely on interactive continuation for steady state
-            echo "claude --continue $model_flag"
+            echo "claude --continue --dangerously-skip-permissions $model_flag"
             ;;
         codex)
             if [ -n "$agent_flags" ]; then
@@ -237,7 +237,7 @@ get_agent_command() {
             ;;
         *)
             # Default to Claude if unknown
-            echo "claude --continue $model_flag"
+            echo "claude --continue --dangerously-skip-permissions $model_flag"
             ;;
     esac
 }

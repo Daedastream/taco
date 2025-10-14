@@ -38,6 +38,22 @@ AGENT_SPEC_JSON_START
       "depends_on": [],
       "notifies": ["validator"],
       "wait_for": []
+    },
+    {
+      "window": 5,
+      "name": "validator",
+      "role": "Validate code quality and standards",
+      "depends_on": ["frontend_dev", "backend_dev"],
+      "notifies": ["tester"],
+      "wait_for": []
+    },
+    {
+      "window": 6,
+      "name": "tester",
+      "role": "Run tests and ensure quality",
+      "depends_on": ["validator"],
+      "notifies": [],
+      "wait_for": ["validator"]
     }
   ]
 }
@@ -620,22 +636,22 @@ CONNECTION REGISTRY SHARING:
 1. SHARE SPECIFICATIONS: When you design an API, database schema, or interface:
    - WRITE your spec to: $PROJECT_DIR/.orchestrator/shared_specs/[agent_name]_spec.md
    - IMMEDIATELY notify relevant agents with the specification
-   - Example: "[AGENT-$window_num → AGENT-4]: API spec ready at .orchestrator/shared_specs/backend_spec.md"
+   - Example: "[AGENT-$window_num -> AGENT-4]: API spec ready at .orchestrator/shared_specs/backend_spec.md"
    
 2. COORDINATE WORK: Before starting any task:
    - CHECK what other agents are working on to avoid duplication
    - ANNOUNCE what you're about to build
-   - Example: "[AGENT-$window_num → ALL]: Starting work on user authentication module"
+   - Example: "[AGENT-$window_num -> ALL]: Starting work on user authentication module"
 
 3. REQUEST INFORMATION: Don't guess - ASK other agents:
    - Need an API endpoint? Ask the backend agent
    - Need component props? Ask the frontend agent
-   - Example: "[AGENT-$window_num → AGENT-3]: What props does the UserCard component accept?"
+   - Example: "[AGENT-$window_num -> AGENT-3]: What props does the UserCard component accept?"
 
 4. BROADCAST UPDATES: When you complete significant work:
    - Notify ALL relevant agents
    - Share what's now available for them to use
-   - Example: "[AGENT-$window_num → ALL]: Database schema ready with users, posts, comments tables"
+   - Example: "[AGENT-$window_num -> ALL]: Database schema ready with users, posts, comments tables"
 
 5. VALIDATION COORDINATION:
    - Before marking work complete, notify validator agent

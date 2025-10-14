@@ -22,12 +22,10 @@ source "$TACO_HOME/lib/taco-testing.sh"
 source "$TACO_HOME/lib/taco-monitoring.sh"
 source "$TACO_HOME/lib/taco-docker.sh"
 source "$TACO_HOME/lib/taco-agents.sh"
-# Source new v2.0 modules
-for module in taco-claude-subagents taco-hybrid-mode taco-mcp taco-hooks taco-settings taco-multi-agent taco-orchestration-v2; do
-    if [ -f "$TACO_HOME/lib/${module}.sh" ]; then
-        source "$TACO_HOME/lib/${module}.sh"
-    fi
-done
+# Source settings module
+if [ -f "$TACO_HOME/lib/taco-settings.sh" ]; then
+    source "$TACO_HOME/lib/taco-settings.sh"
+fi
 
 # Main execution starts here
 main() {
@@ -152,7 +150,7 @@ main() {
                 ;;
             -v|--version)
                 echo -e "${BLUE}🌮 TACO v2.0.0${NC}"
-                echo -e "${CYAN}Claude Sub-Agents | MCP | Multi-Model | Hybrid Mode${NC}"
+                echo -e "${CYAN}Claude & Codex Support${NC}"
                 exit 0
                 ;;
             *)
@@ -528,17 +526,31 @@ main() {
     }
     echo -e "Starting $(color_for_type "$MOTHER_AGENT_TYPE") for Mother..."
     tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PROJECT_DIR' && clear" Enter
-    tmux send-keys -t "$SESSION_NAME:0.0" "$(get_agent_command "$MOTHER_AGENT_TYPE")" Enter
+    # For Mother agent, start Claude without --continue since there's no conversation yet
+    if [ "$MOTHER_AGENT_TYPE" = "claude" ]; then
+        local model_flag=""
+        if [ -n "$TACO_CLAUDE_MODEL" ] && [ "$TACO_CLAUDE_MODEL" != "null" ]; then
+            model_flag="--model $TACO_CLAUDE_MODEL"
+        fi
+        tmux send-keys -t "$SESSION_NAME:0.0" "claude --dangerously-skip-permissions $model_flag" Enter
+    else
+        tmux send-keys -t "$SESSION_NAME:0.0" "$(get_agent_command "$MOTHER_AGENT_TYPE")" Enter
+    fi
     
     # Wait for Mother agent to start
     echo -e "${YELLOW}Workers agent type: $WORKER_AGENT_TYPE${NC}"
     echo -e "${YELLOW}Waiting for $MOTHER_AGENT_TYPE to initialize...${NC}"
     sleep 5
     
+    # If Claude, handle trust prompt
+    if [ "$MOTHER_AGENT_TYPE" = "claude" ]; then
+        echo -e "${YELLOW}Accepting Claude trust prompt...${NC}"
+        tmux send-keys -t "$SESSION_NAME:0.0" "1" Enter
+        sleep 2
+    fi
+    
     # Send the mother prompt
     echo -e "${YELLOW}Sending project requirements to Mother...${NC}"
-    tmux send-keys -t "$SESSION_NAME:0.0" C-u
-    sleep 0.5
     
     # Send prompt line by line
     while IFS= read -r line; do
