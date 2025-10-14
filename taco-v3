@@ -532,21 +532,55 @@ parse_json_spec() {
         return 1
     fi
 
-    # Extract JSON block between markers (take the LAST occurrence, not the first)
-    # This avoids capturing the example JSON from the prompt
-    # Use tail/sed instead of tac (which isn't on macOS by default)
-    local json_block=$(sed -n '/AGENT_SPEC_JSON_START/,/AGENT_SPEC_JSON_END/p' "$spec_file" | \
-                      tail -r | \
-                      sed -n '/AGENT_SPEC_JSON_END/,/AGENT_SPEC_JSON_START/p' | \
-                      tail -r | \
-                      grep -v "AGENT_SPEC_JSON" | \
-                      sed 's/^[[:space:]]*//' | \
-                      grep -v '^```' | \
-                      grep -v '^>' | \
-                      grep -v '^⏺' | \
-                      sed 's/{{/{/g; s/}}/}/g' | \
-                      grep -v '\.\.\.' | \
-                      tr -d '\r')
+    # Extract JSON block ONLY from content after "Begin your analysis and design now"
+    # This avoids capturing the example JSON from the prompt template
+    # First, get everything after the analysis prompt
+    local analysis_start_line=$(grep -n "Begin your analysis and design now" "$spec_file" | tail -1 | cut -d: -f1)
+
+    if [ -z "$analysis_start_line" ]; then
+        log ERROR "Could not find 'Begin your analysis and design now' marker"
+        return 1
+    fi
+
+    # Extract JSON from the analysis section only
+    # First extract the raw JSON block
+    local raw_json=$(tail -n +$analysis_start_line "$spec_file" | \
+                     sed -n '/AGENT_SPEC_JSON_START/,/AGENT_SPEC_JSON_END/p' | \
+                     grep -v "AGENT_SPEC_JSON" | \
+                     grep -v '^```' | \
+                     grep -v '^>' | \
+                     grep -v '^⏺' | \
+                     sed 's/{{/{/g; s/}}/}/g' | \
+                     grep -v '\.\.\.' | \
+                     tr -d '\r')
+
+    # Now join continuation lines (lines that are part of multi-line strings)
+    # A continuation line starts with whitespace and doesn't start a new JSON key
+    local json_block=""
+    local in_string=false
+    local current_line=""
+
+    while IFS= read -r line; do
+        # Remove leading/trailing whitespace
+        local trimmed=$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+
+        # Check if this looks like a continuation (doesn't start with "{", "}", or a quote for a new key)
+        if [[ "$trimmed" =~ ^[^\"{}] ]] && [[ -n "$current_line" ]]; then
+            # This is a continuation, append to current line with space
+            current_line="$current_line $trimmed"
+        else
+            # This is a new line, output the previous one and start fresh
+            if [[ -n "$current_line" ]]; then
+                json_block+="$current_line"$'\n'
+            fi
+            current_line="$trimmed"
+        fi
+    done <<< "$raw_json"
+
+    # Don't forget the last line
+    if [[ -n "$current_line" ]]; then
+        json_block+="$current_line"
+    fi
 
     # Debug: Save extracted JSON to file
     echo "$json_block" > "$PROJECT_DIR/.orchestrator/extracted_json.txt"
