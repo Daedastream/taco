@@ -345,12 +345,24 @@ wait_for_specification() {
         tmux capture-pane -t "$target" -p -S -3000 > "$spec_file" 2>/dev/null || true
 
         # Check for completion markers
-        if grep -q "<<<DONE>>>" "$spec_file" && \
-           grep -q "AGENT_SPEC_JSON_START" "$spec_file" && \
-           grep -q "Begin your analysis and design now" "$spec_file"; then
-            echo
-            log SUCCESS "${BOLD}Specification received!${NC}"
-            return 0
+        # Must have <<<DONE>>> AFTER "Begin your analysis" to avoid matching the example
+        if grep -q "Begin your analysis and design now" "$spec_file"; then
+            # Now look for <<<DONE>>> that comes AFTER the analysis prompt
+            local after_prompt=$(sed -n '/Begin your analysis and design now/,$p' "$spec_file")
+
+            if echo "$after_prompt" | grep -q "<<<DONE>>>" && \
+               echo "$after_prompt" | grep -q "AGENT_SPEC_JSON_START"; then
+                # Extra validation: make sure we have actual agent data, not the example
+                local has_example=$(echo "$after_prompt" | grep -c "... more agents ..." || true)
+                local json_count=$(echo "$after_prompt" | grep -c "AGENT_SPEC_JSON_START" || true)
+
+                # If we have multiple JSON blocks or no example template text, it's real
+                if [ "$has_example" -eq 0 ] || [ "$json_count" -gt 1 ]; then
+                    echo
+                    log SUCCESS "${BOLD}Specification received!${NC}"
+                    return 0
+                fi
+            fi
         fi
 
         # Show rotating phase
@@ -385,13 +397,18 @@ parse_json_spec() {
         return 1
     fi
 
-    # Extract JSON block between markers
-    local json_block=$(sed -n '/AGENT_SPEC_JSON_START/,/AGENT_SPEC_JSON_END/p' "$spec_file" | \
+    # Extract JSON block between markers (take the LAST occurrence, not the first)
+    # This avoids capturing the example JSON from the prompt
+    local json_block=$(tac "$spec_file" | \
+                      sed -n '/AGENT_SPEC_JSON_END/,/AGENT_SPEC_JSON_START/p' | \
+                      tac | \
                       grep -v "AGENT_SPEC_JSON" | \
                       sed 's/^[[:space:]]*//' | \
                       grep -v '^```' | \
                       grep -v '^>' | \
                       grep -v '^⏺' | \
+                      sed 's/{{/{/g; s/}}/}/g' | \
+                      grep -v '\.\.\.' | \
                       tr -d '\r')
 
     # Debug: Save extracted JSON to file
