@@ -9,10 +9,17 @@ SESSION_NAME="taco"
 CLAUDE_MODEL="sonnet"  # Always use sonnet
 PROJECT_PROMPT=""
 PROJECT_DIR=""
+PROJECT_NAME=""
+USE_NEW_DIR=true
 DEBUG=false
 QUICK_MODE=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/taco/templates"
+
+# Questionnaire answers
+PROJECT_TYPE=""
+PROJECT_COMPLEXITY=""
+AGENT_COUNT="auto"
 
 # Colors
 RED='\033[0;31m'
@@ -293,6 +300,39 @@ run_auto_configuration() {
     PROJECT_TYPE="Auto-detected by Mother"
     PROJECT_COMPLEXITY="Auto-detected by Mother"
     AGENT_COUNT="auto"
+
+    # Ask about directory
+    ask_about_directory
+}
+
+# Ask about project directory
+ask_about_directory() {
+    echo
+    echo -e "${WHITE}${BOLD}Project Directory:${NC}"
+    echo -e "  ${BOLD}1)${NC} ${GREEN}Create new directory${NC} ${DIM}(Recommended)${NC}"
+    echo -e "  ${BOLD}2)${NC} ${CYAN}Use current directory${NC} ${DIM}($(pwd))${NC}"
+    echo
+    read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-2, default 1]): " dir_choice
+
+    if [[ "$dir_choice" == "2" ]]; then
+        USE_NEW_DIR=false
+        show_success "Using current directory: ${BOLD}$(pwd)${NC}"
+    else
+        USE_NEW_DIR=true
+        echo
+        echo -e "${WHITE}What would you like to name your project directory?${NC}"
+        echo -e "${DIM}(Leave empty for auto-generated name)${NC}"
+        read -r -p "$(echo -e ${CYAN}❯${NC} Project name): " PROJECT_NAME
+
+        if [ -z "$PROJECT_NAME" ]; then
+            PROJECT_NAME="taco-project-$(date +%Y%m%d-%H%M%S)"
+            show_success "Auto-generated name: ${BOLD}$PROJECT_NAME${NC}"
+        else
+            # Sanitize project name
+            PROJECT_NAME=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+            show_success "Project directory: ${BOLD}$PROJECT_NAME${NC}"
+        fi
+    fi
 }
 
 # Quick mode from command line - just get description
@@ -325,10 +365,12 @@ get_quick_description() {
 
     PROJECT_PROMPT=$(printf '%s\n' "${lines[@]}")
 
-    # Auto-detect settings
+    # Auto-detect settings (for -q flag)
     PROJECT_TYPE="Auto-detected by Mother"
     PROJECT_COMPLEXITY="Auto-detected by Mother"
     AGENT_COUNT="auto"
+    USE_NEW_DIR=true
+    PROJECT_NAME="taco-project-$(date +%Y%m%d-%H%M%S)"
 }
 
 # Show configuration summary
@@ -347,6 +389,16 @@ show_configuration() {
     echo -e "${BOLD}${WHITE}Description:${NC}"
     echo "$PROJECT_PROMPT" | sed 's/^/  │ /'
     echo
+
+    if [ "$USE_NEW_DIR" = true ]; then
+        echo -e "${BOLD}${WHITE}Directory:${NC}"
+        echo -e "  ${CYAN}●${NC} New directory: ${BOLD}$(pwd)/$PROJECT_NAME${NC}"
+        echo
+    else
+        echo -e "${BOLD}${WHITE}Directory:${NC}"
+        echo -e "  ${CYAN}●${NC} Current directory: ${BOLD}$(pwd)${NC}"
+        echo
+    fi
 
     read -r -p "$(echo -e ${YELLOW}Continue? [Y/n]:${NC} )" confirm
     if [[ "$confirm" =~ ^[Nn]$ ]]; then
@@ -404,7 +456,7 @@ create_agent_prompt() {
 wait_for_specification() {
     local target="${SESSION_NAME}:0.0"
     local spec_file="$PROJECT_DIR/.orchestrator/agent_spec.txt"
-    local timeout=180
+    local timeout=300  # Increased to 5 minutes
     local elapsed=0
     local wait_time=2
 
@@ -426,14 +478,20 @@ wait_for_specification() {
             # Now look for <<<DONE>>> that comes AFTER the analysis prompt
             local after_prompt=$(sed -n '/Begin your analysis and design now/,$p' "$spec_file")
 
-            if echo "$after_prompt" | grep -q "<<<DONE>>>" && \
+            # Look for <<<DONE>>> or variations
+            if echo "$after_prompt" | grep -qE "(<<<DONE>>>|<<DONE>>|<DONE>|DONE>>>)" && \
                echo "$after_prompt" | grep -q "AGENT_SPEC_JSON_START"; then
                 # Extra validation: make sure we have actual agent data, not the example
                 local has_example=$(echo "$after_prompt" | grep -c "... more agents ..." || true)
                 local json_count=$(echo "$after_prompt" | grep -c "AGENT_SPEC_JSON_START" || true)
 
-                # If we have multiple JSON blocks or no example template text, it's real
-                if [ "$has_example" -eq 0 ] || [ "$json_count" -gt 1 ]; then
+                # Look for real agent data indicators
+                local has_window=$(echo "$after_prompt" | grep -c '"window":[[:space:]]*[0-9]' || true)
+                local has_name=$(echo "$after_prompt" | grep -c '"name":[[:space:]]*"[^"]*"' || true)
+
+                # If we have multiple JSON blocks or no example template text, and have real data
+                if ([ "$has_example" -eq 0 ] || [ "$json_count" -gt 1 ]) && \
+                   [ "$has_window" -gt 0 ] && [ "$has_name" -gt 0 ]; then
                     echo
                     log SUCCESS "${BOLD}Specification received!${NC}"
                     return 0
@@ -717,9 +775,21 @@ EOF
     section_header "INITIALIZING TACO"
 
     log INFO "Setting up project workspace..."
-    PROJECT_DIR="$(pwd)/taco-project-$(date +%Y%m%d-%H%M%S)"
+
+    # Create or use directory based on user choice
+    if [ "$USE_NEW_DIR" = true ]; then
+        if [ -z "$PROJECT_NAME" ]; then
+            PROJECT_NAME="taco-project-$(date +%Y%m%d-%H%M%S)"
+        fi
+        PROJECT_DIR="$(pwd)/$PROJECT_NAME"
+        mkdir -p "$PROJECT_DIR"
+        show_success "Created directory: ${BOLD}$PROJECT_DIR${NC}"
+    else
+        PROJECT_DIR="$(pwd)"
+        show_success "Using current directory: ${BOLD}$PROJECT_DIR${NC}"
+    fi
+
     mkdir -p "$PROJECT_DIR/.orchestrator"
-    show_success "Project directory: ${BOLD}$PROJECT_DIR${NC}"
 
     log INFO "Creating tmux session..."
     tmux has-session -t "$SESSION_NAME" 2>/dev/null && tmux kill-session -t "$SESSION_NAME"
