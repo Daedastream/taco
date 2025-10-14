@@ -20,6 +20,7 @@ TEMPLATES_DIR="$SCRIPT_DIR/taco/templates"
 PROJECT_TYPE=""
 PROJECT_COMPLEXITY=""
 AGENT_COUNT="auto"
+PANES_PER_WINDOW=1
 
 # Colors
 RED='\033[0;31m'
@@ -634,40 +635,95 @@ parse_json_spec() {
     return 0
 }
 
+# Ask about window layout
+ask_window_layout() {
+    local agent_count=${#AGENT_NAMES[@]}
+
+    section_header "WINDOW LAYOUT CONFIGURATION"
+
+    echo -e "${WHITE}You have ${BOLD}$agent_count agents${NC}${WHITE} ready to spawn.${NC}"
+    echo
+    echo -e "${WHITE}How many agents per window would you like?${NC}"
+    echo
+    echo -e "  ${BOLD}1)${NC} ${GREEN}1 pane per window${NC} ${DIM}(each agent gets its own window)${NC}"
+    echo -e "  ${BOLD}2)${NC} ${CYAN}2 panes per window${NC} ${DIM}(split windows horizontally)${NC}"
+    echo -e "  ${BOLD}3)${NC} ${CYAN}3 panes per window${NC}"
+    echo -e "  ${BOLD}4)${NC} ${CYAN}4 panes per window${NC} ${DIM}(2x2 grid)${NC}"
+    echo -e "  ${BOLD}5)${NC} ${CYAN}5 panes per window${NC}"
+    echo -e "  ${BOLD}6)${NC} ${CYAN}6 panes per window${NC} ${DIM}(2x3 or 3x2 grid)${NC}"
+    echo
+    echo -e "${DIM}Note: Mother always has window 0 alone${NC}"
+    echo
+
+    read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-6, default 1]: )" layout_choice
+
+    case "$layout_choice" in
+        2) PANES_PER_WINDOW=2 ;;
+        3) PANES_PER_WINDOW=3 ;;
+        4) PANES_PER_WINDOW=4 ;;
+        5) PANES_PER_WINDOW=5 ;;
+        6) PANES_PER_WINDOW=6 ;;
+        *) PANES_PER_WINDOW=1 ;;
+    esac
+
+    local num_windows=$(( (agent_count + PANES_PER_WINDOW - 1) / PANES_PER_WINDOW ))
+
+    echo
+    show_success "Layout: ${BOLD}$PANES_PER_WINDOW panes per window${NC} ${DIM}(~$num_windows windows total)${NC}"
+}
+
 # Create agent windows with beautiful progress
 create_agent_windows() {
     section_header "SPAWNING AGENTS"
 
     local total=${#AGENT_NAMES[@]}
+    local current_window=3
+    local pane_in_window=0
 
     for ((i=0; i<total; i++)); do
-        local window="${AGENT_WINDOWS[$i]}"
         local name="${AGENT_NAMES[$i]}"
         local role="${AGENT_ROLES[$i]}"
 
         progress_bar $((i + 1)) $total
         echo
-        log INFO "Spawning ${BOLD}$name${NC} in window $window..."
 
-        # Create window
-        tmux new-window -t "${SESSION_NAME}:${window}" -n "$name" -c "$PROJECT_DIR" 2>/dev/null || true
+        # Determine window and pane
+        if [ $pane_in_window -eq 0 ]; then
+            # First pane in new window
+            log INFO "Spawning ${BOLD}$name${NC} in window $current_window (pane 0)..."
+            tmux new-window -t "${SESSION_NAME}:${current_window}" -n "$name" -c "$PROJECT_DIR" 2>/dev/null || true
+            local target="${SESSION_NAME}:${current_window}.0"
+        else
+            # Additional pane in existing window
+            log INFO "Spawning ${BOLD}$name${NC} in window $current_window (pane $pane_in_window)..."
+            tmux split-window -t "${SESSION_NAME}:${current_window}" -c "$PROJECT_DIR"
+            tmux select-layout -t "${SESSION_NAME}:${current_window}" tiled
+            local target="${SESSION_NAME}:${current_window}.$pane_in_window"
+        fi
 
-        # Start Claude (always default model)
-        tmux send-keys -t "${SESSION_NAME}:${window}.0" "claude --dangerously-skip-permissions" Enter
+        # Start Claude
+        tmux send-keys -t "$target" "claude --dangerously-skip-permissions" Enter
         sleep 3
 
         # Accept trust
-        tmux send-keys -t "${SESSION_NAME}:${window}.0" "1" Enter
+        tmux send-keys -t "$target" "1" Enter
         sleep 1
 
-        # Send agent prompt
-        local prompt=$(create_agent_prompt "$name" "$window" "$role" "none" "none")
+        # Send agent prompt (use current_window as the window identifier)
+        local prompt=$(create_agent_prompt "$name" "$current_window" "$role" "none" "none")
         printf '%s' "$prompt" | tmux load-buffer -
-        tmux paste-buffer -t "${SESSION_NAME}:${window}.0"
+        tmux paste-buffer -t "$target"
         sleep 0.3
-        tmux send-keys -t "${SESSION_NAME}:${window}.0" Enter
+        tmux send-keys -t "$target" Enter
 
         show_success "Agent ${BOLD}$name${NC} is ready"
+
+        # Move to next pane/window
+        pane_in_window=$((pane_in_window + 1))
+        if [ $pane_in_window -ge $PANES_PER_WINDOW ]; then
+            pane_in_window=0
+            current_window=$((current_window + 1))
+        fi
     done
 
     echo
@@ -861,6 +917,9 @@ EOF
 
     # Parse spec
     parse_json_spec "$PROJECT_DIR/.orchestrator/agent_spec.txt" || exit 1
+
+    # Ask about window layout
+    ask_window_layout
 
     # Create agents
     sleep 2
