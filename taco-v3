@@ -168,8 +168,28 @@ run_questionnaire() {
     echo -e "${WHITE}Let's gather some details about your project...${NC}"
     echo
 
+    # Question 0: Auto or Manual
+    show_step 1 1 "Configuration mode"
+    echo
+    echo -e "  ${BOLD}1)${NC} ${GREEN}Auto${NC} ${DIM}(Let Mother analyze and decide everything)${NC}"
+    echo -e "  ${BOLD}2)${NC} ${CYAN}Manual${NC} ${DIM}(Choose project type and complexity)${NC}"
+    echo
+    read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-2, default 1]): " mode_choice
+
+    if [[ "$mode_choice" == "2" ]]; then
+        # Manual mode - ask all questions
+        run_manual_configuration
+    else
+        # Auto mode - just get description
+        show_success "Mode: ${BOLD}Auto${NC} ${DIM}(Mother will analyze your project)${NC}"
+        run_auto_configuration
+    fi
+}
+
+# Manual configuration with all questions
+run_manual_configuration() {
     # Question 1: Project Type
-    show_step 1 3 "What type of project are you building?"
+    show_step 2 4 "What type of project are you building?"
     echo
     echo -e "  ${BOLD}1)${NC} ${CYAN}Web Application${NC} ${DIM}(Frontend + Backend)${NC}"
     echo -e "  ${BOLD}2)${NC} ${CYAN}Mobile App${NC} ${DIM}(iOS, Android, or React Native)${NC}"
@@ -192,7 +212,7 @@ run_questionnaire() {
     show_success "Project type: ${BOLD}$PROJECT_TYPE${NC}"
 
     # Question 2: Complexity
-    show_step 2 3 "What's the complexity level?"
+    show_step 3 4 "What's the complexity level?"
     echo
     echo -e "  ${BOLD}1)${NC} ${GREEN}Simple${NC} ${DIM}(Single file, basic functionality)${NC}"
     echo -e "  ${BOLD}2)${NC} ${CYAN}Moderate${NC} ${DIM}(Multiple files, some features)${NC}"
@@ -212,7 +232,7 @@ run_questionnaire() {
     show_success "Complexity: ${BOLD}$PROJECT_COMPLEXITY${NC} ${DIM}(~$AGENT_COUNT agents)${NC}"
 
     # Question 3: Description
-    show_step 3 3 "Describe your project"
+    show_step 4 4 "Describe your project"
     echo
     echo -e "${DIM}Be as detailed as you want. Press Enter twice when done.${NC}"
     echo
@@ -240,7 +260,42 @@ run_questionnaire() {
     PROJECT_PROMPT=$(printf '%s\n' "${lines[@]}")
 }
 
-# Quick mode - just get description
+# Auto configuration - just get description
+run_auto_configuration() {
+    show_step 2 2 "Describe your project"
+    echo
+    echo -e "${DIM}Be as detailed as you want. Press Enter twice when done.${NC}"
+    echo
+
+    local lines=()
+    local empty_count=0
+
+    while true; do
+        if [ ${#lines[@]} -eq 0 ]; then
+            read -r -p "$(echo -e ${CYAN}❯${NC} ) " line
+        else
+            read -r -p "$(echo -e ${DIM}│${NC} ) " line
+        fi
+
+        if [ -z "$line" ]; then
+            empty_count=$((empty_count + 1))
+            [ $empty_count -ge 2 ] && break
+            [ $empty_count -ge 1 ] && [ ${#lines[@]} -gt 0 ] && break
+        else
+            empty_count=0
+            lines+=("$line")
+        fi
+    done
+
+    PROJECT_PROMPT=$(printf '%s\n' "${lines[@]}")
+
+    # Auto-detect settings
+    PROJECT_TYPE="Auto-detected by Mother"
+    PROJECT_COMPLEXITY="Auto-detected by Mother"
+    AGENT_COUNT="auto"
+}
+
+# Quick mode from command line - just get description
 get_quick_description() {
     section_header "QUICK START"
 
@@ -271,8 +326,8 @@ get_quick_description() {
     PROJECT_PROMPT=$(printf '%s\n' "${lines[@]}")
 
     # Auto-detect settings
-    PROJECT_TYPE="Auto-detected"
-    PROJECT_COMPLEXITY="Auto-detected"
+    PROJECT_TYPE="Auto-detected by Mother"
+    PROJECT_COMPLEXITY="Auto-detected by Mother"
     AGENT_COUNT="auto"
 }
 
