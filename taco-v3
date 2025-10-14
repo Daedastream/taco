@@ -478,9 +478,10 @@ wait_for_specification() {
             # Now look for <<<DONE>>> that comes AFTER the analysis prompt
             local after_prompt=$(sed -n '/Begin your analysis and design now/,$p' "$spec_file")
 
-            # Look for <<<DONE>>> or variations
-            if echo "$after_prompt" | grep -qE "(<<<DONE>>>|<<DONE>>|<DONE>|DONE>>>)" && \
-               echo "$after_prompt" | grep -q "AGENT_SPEC_JSON_START"; then
+            # Look for <<<DONE>>> or variations (including <<>> which Claude sometimes outputs)
+            if echo "$after_prompt" | grep -qE "(<<<DONE>>>|<<DONE>>|<DONE>|DONE>>>|<<>>)" && \
+               echo "$after_prompt" | grep -q "AGENT_SPEC_JSON_START" && \
+               echo "$after_prompt" | grep -q "AGENT_SPEC_JSON_END"; then
                 # Extra validation: make sure we have actual agent data, not the example
                 local has_example=$(echo "$after_prompt" | grep -c "... more agents ..." || true)
                 local json_count=$(echo "$after_prompt" | grep -c "AGENT_SPEC_JSON_START" || true)
