@@ -7,6 +7,11 @@ connections.json
 # Project output directories
 project-*/
 *-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]/
+soccer/
+soccer-2/
+uber-clone-*.txt
+uber-clone-*.json
+*-spec.json
 
 # OS files
 .DS_Store
