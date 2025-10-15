@@ -913,8 +913,10 @@ EOF
     tmux new-session -d -s "$SESSION_NAME" -n "mother" -c "$PROJECT_DIR"
 
     # Enable pane borders with titles for visual identification
-    tmux set-option -t "$SESSION_NAME" pane-border-status top
-    tmux set-option -t "$SESSION_NAME" pane-border-format "#{pane_index}: #{pane_title}"
+    tmux set-option -t "$SESSION_NAME" -w pane-border-status top
+    tmux set-option -t "$SESSION_NAME" -w pane-border-format "#[fg=cyan,bold]#{pane_index}:#[fg=green] #{pane_title}"
+    tmux set-option -t "$SESSION_NAME" -w pane-border-style "fg=colour240"
+    tmux set-option -t "$SESSION_NAME" -w pane-active-border-style "fg=colour51"
 
     # Set Mother's pane title
     tmux select-pane -t "${SESSION_NAME}:0.0" -T "MOTHER"
