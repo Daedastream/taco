@@ -711,6 +711,13 @@ create_agent_windows() {
 
             log INFO "Spawning ${BOLD}$name${NC} in window $current_window:pane 0..."
             tmux new-window -t "${SESSION_NAME}:${current_window}" -n "$window_name" -c "$PROJECT_DIR" 2>/dev/null || true
+
+            # Enable pane labels for this window
+            tmux set-option -t "${SESSION_NAME}:${current_window}" -w pane-border-status top
+            tmux set-option -t "${SESSION_NAME}:${current_window}" -w pane-border-format "#[fg=cyan,bold]#{pane_index}:#[fg=green] #{pane_title}"
+            tmux set-option -t "${SESSION_NAME}:${current_window}" -w pane-border-style "fg=colour240"
+            tmux set-option -t "${SESSION_NAME}:${current_window}" -w pane-active-border-style "fg=colour51"
+
             local target="${SESSION_NAME}:${current_window}.0"
         else
             # Additional pane in existing window
