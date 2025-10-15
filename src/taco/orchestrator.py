@@ -912,6 +912,13 @@ OUTPUT FORMAT
 
 Output your architecture as valid JSON:
 
+⚠️ CRITICAL: Window numbers must be UNIQUE and SEQUENTIAL!
+- First agent: window 3
+- Second agent: window 4
+- Third agent: window 5
+- Fourth agent: window 6
+- And so on... NEVER reuse a window number!
+
 AGENT_SPEC_JSON_START
 {{
   "agents": [
@@ -931,18 +938,35 @@ AGENT_SPEC_JSON_START
       "notifies": ["downstream_agents"],
       "wait_for": ["project_setup"]
     }},
-    ... more agents ...
     {{
-      "window": N,
+      "window": 5,
+      "name": "another_agent",
+      "role": "Another specific responsibility",
+      "depends_on": ["project_setup"],
+      "notifies": ["integration_tester"],
+      "wait_for": ["project_setup"]
+    }},
+    {{
+      "window": 6,
+      "name": "yet_another_agent",
+      "role": "Yet another specific responsibility",
+      "depends_on": ["project_setup"],
+      "notifies": ["integration_tester"],
+      "wait_for": ["project_setup"]
+    }},
+    {{
+      "window": 7,
       "name": "integration_tester",
       "role": "Execute end-to-end tests verifying all components work together",
-      "depends_on": ["previous_agents"],
+      "depends_on": ["descriptive_agent_name", "another_agent", "yet_another_agent"],
       "notifies": [],
-      "wait_for": ["previous_agents"]
+      "wait_for": ["descriptive_agent_name", "another_agent", "yet_another_agent"]
     }}
   ]
 }}
 AGENT_SPEC_JSON_END
+
+⚠️ REMINDER: Each agent needs its own unique window number! Start at 3, increment by 1 for each agent (3, 4, 5, 6, 7...). NEVER use the same window number twice!
 
 After the JSON, output exactly: <<<DONE>>>
 

@@ -107,15 +107,17 @@ DO NOT just type tmux commands as text - they will not execute!
 
 Every message must follow this pattern:
 1. Use the Bash tool
-2. Execute: tmux send-keys -t taco:[WINDOW] -l "YOUR MESSAGE"
+2. Execute: tmux send-keys -t taco:[WINDOW].[PANE] -l "YOUR MESSAGE"
 3. Sleep 0.2 seconds (REQUIRED! tmux needs time to process)
-4. Execute: tmux send-keys -t taco:[WINDOW] Enter
+4. Execute: tmux send-keys -t taco:[WINDOW].[PANE] Enter
 
 Without the sleep and Enter keystroke, the message won't be submitted!
 
+⚠️  Use the full window.pane notation (e.g., taco:3.0, taco:3.1) from the AGENT ROSTER above!
+
 Example:
 ```bash
-tmux send-keys -t taco:3 -l "Your message here" && sleep 0.2 && tmux send-keys -t taco:3 Enter
+tmux send-keys -t taco:3.0 -l "Your message here" && sleep 0.2 && tmux send-keys -t taco:3.0 Enter
 ```
 
 🚀 CRITICAL: Maximize parallelism from the start!
@@ -173,24 +175,26 @@ Start immediately!"
 
 Step 2: Send it using Bash tool (with required sleep!):
 ```bash
-tmux send-keys -t taco:[WINDOW] -l "$MESSAGE" && sleep 0.2 && tmux send-keys -t taco:[WINDOW] Enter
+tmux send-keys -t taco:[WINDOW].[PANE] -l "$MESSAGE" && sleep 0.2 && tmux send-keys -t taco:[WINDOW].[PANE] Enter
 ```
 
 The sleep 0.2 is CRITICAL - without it, the Enter key fires before the message loads!
+Replace [WINDOW].[PANE] with the actual location from the AGENT ROSTER (e.g., 3.0, 4.1, etc.).
 
 PARALLEL DELEGATION EXAMPLE:
 After setup_agent completes, use the Bash tool to send messages to ALL agents in one go:
 
 ```bash
-# Send to multiple agents in parallel (note the sleep 0.2 between message and Enter!)
-tmux send-keys -t taco:4 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:4 Enter && \
-tmux send-keys -t taco:5 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:5 Enter && \
-tmux send-keys -t taco:6 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:6 Enter && \
-tmux send-keys -t taco:7 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:7 Enter
+# Send to multiple agents in parallel (use actual window.pane from AGENT ROSTER above)
+tmux send-keys -t taco:4.0 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:4.0 Enter && \
+tmux send-keys -t taco:5.0 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:5.0 Enter && \
+tmux send-keys -t taco:6.0 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:6.0 Enter && \
+tmux send-keys -t taco:7.0 -l "MESSAGE" && sleep 0.2 && tmux send-keys -t taco:7.0 Enter
 ```
 
 Or send them one at a time using separate Bash tool calls for each agent.
 ALWAYS include the sleep 0.2 between message and Enter!
+Use the exact window.pane locations from the AGENT ROSTER above.
 
 Maximum speed through maximum parallelism!
 

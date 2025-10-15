@@ -119,6 +119,22 @@ class SpecParser:
                     logger.warning(f"Invalid agent data: {e}")
                     continue
 
+            # Validate no duplicate window numbers
+            if agents:
+                window_numbers = [agent.window for agent in agents]
+                duplicates = [w for w in set(window_numbers) if window_numbers.count(w) > 1]
+                if duplicates:
+                    logger.error(f"❌ CRITICAL: Duplicate window numbers detected: {duplicates}")
+                    logger.error(f"Agents assigned to same windows:")
+                    for dup_window in duplicates:
+                        conflicting_agents = [a.name for a in agents if a.window == dup_window]
+                        logger.error(f"  Window {dup_window}: {', '.join(conflicting_agents)}")
+                    raise ValueError(
+                        f"Duplicate window numbers found: {duplicates}. "
+                        f"Each agent must have a unique window number. "
+                        f"Mother needs to assign sequential window numbers starting from 3."
+                    )
+
             return agents if agents else None
 
         except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
@@ -234,6 +250,22 @@ class SpecParser:
                 agents.append(self._build_agent_from_dict(current_agent))
             except ValueError as e:
                 logger.warning(f"Invalid agent: {e}")
+
+        # Validate no duplicate window numbers
+        if agents:
+            window_numbers = [agent.window for agent in agents]
+            duplicates = [w for w in set(window_numbers) if window_numbers.count(w) > 1]
+            if duplicates:
+                logger.error(f"❌ CRITICAL: Duplicate window numbers detected: {duplicates}")
+                logger.error(f"Agents assigned to same windows:")
+                for dup_window in duplicates:
+                    conflicting_agents = [a.name for a in agents if a.window == dup_window]
+                    logger.error(f"  Window {dup_window}: {', '.join(conflicting_agents)}")
+                raise ValueError(
+                    f"Duplicate window numbers found: {duplicates}. "
+                    f"Each agent must have a unique window number. "
+                    f"Mother needs to assign sequential window numbers starting from 3."
+                )
 
         return agents if agents else None
 

@@ -441,12 +441,15 @@ create_mother_prompt() {
 create_agent_prompt() {
     local name="$1"
     local window="$2"
-    local role="$3"
-    local depends="$4"
-    local notifies="$5"
+    local pane="$3"
+    local role="$4"
+    local depends="$5"
+    local notifies="$6"
 
     AGENT_NAME="$name" \
     AGENT_WINDOW="$window" \
+    AGENT_PANE="$pane" \
+    AGENT_LOCATION="$window.$pane" \
     AGENT_ROLE="$role" \
     DEPENDS_ON="$depends" \
     NOTIFIES="$notifies" \
@@ -680,6 +683,10 @@ create_agent_windows() {
     local current_window=3
     local pane_in_window=0
 
+    # Clear and rebuild location arrays with actual placements
+    AGENT_WINDOWS=()
+    AGENT_PANES=()
+
     for ((i=0; i<total; i++)); do
         local name="${AGENT_NAMES[$i]}"
         local role="${AGENT_ROLES[$i]}"
@@ -687,15 +694,27 @@ create_agent_windows() {
         progress_bar $((i + 1)) $total
         echo
 
+        # Store actual window:pane location for this agent
+        AGENT_WINDOWS+=("$current_window")
+        AGENT_PANES+=("$pane_in_window")
+
         # Determine window and pane
         if [ $pane_in_window -eq 0 ]; then
             # First pane in new window
-            log INFO "Spawning ${BOLD}$name${NC} in window $current_window (pane 0)..."
-            tmux new-window -t "${SESSION_NAME}:${current_window}" -n "$name" -c "$PROJECT_DIR" 2>/dev/null || true
+            # Choose window name: use agent name if 1 pane per window, generic name if multiple panes
+            local window_name
+            if [ $PANES_PER_WINDOW -eq 1 ]; then
+                window_name="$name"
+            else
+                window_name="agents-$current_window"
+            fi
+
+            log INFO "Spawning ${BOLD}$name${NC} in window $current_window:pane 0..."
+            tmux new-window -t "${SESSION_NAME}:${current_window}" -n "$window_name" -c "$PROJECT_DIR" 2>/dev/null || true
             local target="${SESSION_NAME}:${current_window}.0"
         else
             # Additional pane in existing window
-            log INFO "Spawning ${BOLD}$name${NC} in window $current_window (pane $pane_in_window)..."
+            log INFO "Spawning ${BOLD}$name${NC} in window $current_window:pane $pane_in_window..."
             tmux split-window -t "${SESSION_NAME}:${current_window}" -c "$PROJECT_DIR"
             tmux select-layout -t "${SESSION_NAME}:${current_window}" tiled
             local target="${SESSION_NAME}:${current_window}.$pane_in_window"
@@ -709,8 +728,8 @@ create_agent_windows() {
         tmux send-keys -t "$target" "1" Enter
         sleep 1
 
-        # Send agent prompt (use current_window as the window identifier)
-        local prompt=$(create_agent_prompt "$name" "$current_window" "$role" "none" "none")
+        # Send agent prompt with correct window:pane location
+        local prompt=$(create_agent_prompt "$name" "$current_window" "$pane_in_window" "$role" "none" "none")
         printf '%s' "$prompt" | tmux load-buffer -
         tmux paste-buffer -t "$target"
         sleep 0.3
@@ -738,10 +757,12 @@ send_coordination_prompt() {
 
     log INFO "Building agent roster..."
 
-    # Build agents info
+    # Build agents info with actual window:pane locations
     local agents_info=""
     for ((i=0; i<${#AGENT_NAMES[@]}; i++)); do
-        agents_info+="  Window ${AGENT_WINDOWS[$i]}: ${AGENT_NAMES[$i]}\n"
+        local window="${AGENT_WINDOWS[$i]}"
+        local pane="${AGENT_PANES[$i]}"
+        agents_info+="  taco:${window}.${pane} - ${AGENT_NAMES[$i]}\n"
         agents_info+="    Role: ${AGENT_ROLES[$i]}\n\n"
     done
 
