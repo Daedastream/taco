@@ -20,8 +20,13 @@ TEMPLATES_DIR="$SCRIPT_DIR/taco/templates"
 TMUX_BASE_INDEX=$(tmux show-option -g base-index 2>/dev/null | awk '{print $2}')
 TMUX_BASE_INDEX=${TMUX_BASE_INDEX:-0}  # Default to 0 if not set
 
+# Detect tmux pane-base-index (user may have customized this)
+TMUX_PANE_BASE_INDEX=$(tmux show-option -g pane-base-index 2>/dev/null | awk '{print $2}')
+TMUX_PANE_BASE_INDEX=${TMUX_PANE_BASE_INDEX:-0}  # Default to 0 if not set
+
 # Window numbers (adjusted for base-index)
 MOTHER_WINDOW=$TMUX_BASE_INDEX
+MOTHER_PANE=$TMUX_PANE_BASE_INDEX
 FIRST_AGENT_WINDOW=$((TMUX_BASE_INDEX + 3))
 
 # Questionnaire answers
@@ -462,12 +467,13 @@ create_agent_prompt() {
     DEPENDS_ON="$depends" \
     NOTIFIES="$notifies" \
     MOTHER_WINDOW="$MOTHER_WINDOW" \
+    MOTHER_PANE="$MOTHER_PANE" \
     envsubst < "$TEMPLATES_DIR/agent-prompt.txt"
 }
 
 # Wait for specification with beautiful progress
 wait_for_specification() {
-    local target="${SESSION_NAME}:${MOTHER_WINDOW}.0"
+    local target="${SESSION_NAME}:${MOTHER_WINDOW}.${MOTHER_PANE}"
     local spec_file="$PROJECT_DIR/.orchestrator/agent_spec.txt"
     local timeout=300  # Increased to 5 minutes
     local elapsed=0
@@ -690,7 +696,8 @@ create_agent_windows() {
 
     local total=${#AGENT_NAMES[@]}
     local current_window=$FIRST_AGENT_WINDOW
-    local pane_in_window=0
+    local pane_count_in_window=0
+    local current_pane=$TMUX_PANE_BASE_INDEX
 
     # Clear and rebuild location arrays with actual placements
     AGENT_WINDOWS=()
@@ -705,10 +712,10 @@ create_agent_windows() {
 
         # Store actual window:pane location for this agent
         AGENT_WINDOWS+=("$current_window")
-        AGENT_PANES+=("$pane_in_window")
+        AGENT_PANES+=("$current_pane")
 
         # Determine window and pane
-        if [ $pane_in_window -eq 0 ]; then
+        if [ $pane_count_in_window -eq 0 ]; then
             # First pane in new window
             # Choose window name: use agent name if 1 pane per window, generic name if multiple panes
             local window_name
@@ -718,7 +725,7 @@ create_agent_windows() {
                 window_name="agents-$current_window"
             fi
 
-            log INFO "Spawning ${BOLD}$name${NC} in window $current_window:pane 0..."
+            log INFO "Spawning ${BOLD}$name${NC} in window $current_window:pane $current_pane..."
             tmux new-window -t "${SESSION_NAME}:${current_window}" -n "$window_name" -c "$PROJECT_DIR" 2>/dev/null || true
 
             # Enable pane labels for this window
@@ -727,13 +734,13 @@ create_agent_windows() {
             tmux set-option -t "${SESSION_NAME}:${current_window}" -w pane-border-style "fg=colour240"
             tmux set-option -t "${SESSION_NAME}:${current_window}" -w pane-active-border-style "fg=colour51"
 
-            local target="${SESSION_NAME}:${current_window}.0"
+            local target="${SESSION_NAME}:${current_window}.${current_pane}"
         else
             # Additional pane in existing window
-            log INFO "Spawning ${BOLD}$name${NC} in window $current_window:pane $pane_in_window..."
+            log INFO "Spawning ${BOLD}$name${NC} in window $current_window:pane $current_pane..."
             tmux split-window -t "${SESSION_NAME}:${current_window}" -c "$PROJECT_DIR"
             tmux select-layout -t "${SESSION_NAME}:${current_window}" tiled
-            local target="${SESSION_NAME}:${current_window}.$pane_in_window"
+            local target="${SESSION_NAME}:${current_window}.${current_pane}"
         fi
 
         # Set pane title for visual identification
@@ -757,9 +764,12 @@ create_agent_windows() {
         show_success "Agent ${BOLD}$name${NC} is ready"
 
         # Move to next pane/window
-        pane_in_window=$((pane_in_window + 1))
-        if [ $pane_in_window -ge $PANES_PER_WINDOW ]; then
-            pane_in_window=0
+        pane_count_in_window=$((pane_count_in_window + 1))
+        current_pane=$((current_pane + 1))
+
+        if [ $pane_count_in_window -ge $PANES_PER_WINDOW ]; then
+            pane_count_in_window=0
+            current_pane=$TMUX_PANE_BASE_INDEX
             current_window=$((current_window + 1))
         fi
     done
@@ -772,7 +782,7 @@ create_agent_windows() {
 send_coordination_prompt() {
     section_header "ACTIVATING COORDINATION MODE"
 
-    local target="${SESSION_NAME}:${MOTHER_WINDOW}.0"
+    local target="${SESSION_NAME}:${MOTHER_WINDOW}.${MOTHER_PANE}"
 
     log INFO "Building agent roster..."
 
@@ -935,7 +945,7 @@ EOF
     tmux set-option -t "$SESSION_NAME" -w pane-active-border-style "fg=colour51"
 
     # Set Mother's pane title
-    tmux select-pane -t "${SESSION_NAME}:${MOTHER_WINDOW}.0" -T "MOTHER"
+    tmux select-pane -t "${SESSION_NAME}:${MOTHER_WINDOW}.${MOTHER_PANE}" -T "MOTHER"
 
     show_success "Session: ${BOLD}$SESSION_NAME${NC}"
 
@@ -943,7 +953,7 @@ EOF
     section_header "LAUNCHING MOTHER AGENT"
 
     log INFO "Starting Claude in Mother window..."
-    local target="${SESSION_NAME}:${MOTHER_WINDOW}.0"
+    local target="${SESSION_NAME}:${MOTHER_WINDOW}.${MOTHER_PANE}"
 
     # Always use default model (no flag = sonnet)
     tmux send-keys -t "$target" "claude --dangerously-skip-permissions" Enter

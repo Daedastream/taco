@@ -83,7 +83,7 @@ A) PROBLEM IS WITHIN YOUR DOMAIN
    → Fix it yourself (you're capable!)
    → If it causes delays, inform Mother using Bash tool:
    ```bash
-   tmux send-keys -t taco:$MOTHER_WINDOW.0 -l "DELAY_REPORT: $AGENT_NAME: [brief reason] - [estimated additional time]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.0 Enter
+   tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "DELAY_REPORT: $AGENT_NAME: [brief reason] - [estimated additional time]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
    ```
    → Continue working after fix
 
@@ -92,7 +92,7 @@ B) PROBLEM IS OUTSIDE YOUR DOMAIN
    → DO NOT attempt to fix (stay in your lane)
    → Report to Mother immediately using Bash tool:
    ```bash
-   tmux send-keys -t taco:$MOTHER_WINDOW.0 -l "ERROR_REPORT: $AGENT_NAME: [problem description] - [which agent's domain] - [blocking: YES/NO]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.0 Enter
+   tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "ERROR_REPORT: $AGENT_NAME: [problem description] - [which agent's domain] - [blocking: YES/NO]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
    ```
    → If non-blocking: continue with other work
    → If blocking: await Mother's delegation to appropriate agent
@@ -101,7 +101,7 @@ C) PROBLEM IS SYSTEMIC (affects multiple agents)
    Examples: Architecture needs revision, tech stack change required
    → Report to Mother with recommendation using Bash tool:
    ```bash
-   tmux send-keys -t taco:$MOTHER_WINDOW.0 -l "SYSTEMIC_ISSUE: $AGENT_NAME: [problem] - [impact] - [recommended solution]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.0 Enter
+   tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "SYSTEMIC_ISSUE: $AGENT_NAME: [problem] - [impact] - [recommended solution]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
    ```
    → Await Mother's updated coordination plan
 
@@ -109,11 +109,11 @@ PHASE 4: COMMUNICATE PROGRESS (CRITICAL!)
 
 You MUST proactively update Mother about your progress using the Bash tool.
 
-⚠️ IMPORTANT: Don't just output status text - send it to Mother's window (taco:$MOTHER_WINDOW.0)!
+⚠️ IMPORTANT: Don't just output status text - send it to Mother's window (taco:$MOTHER_WINDOW.$MOTHER_PANE)!
 
 Use the Bash tool to execute:
 ```bash
-tmux send-keys -t taco:$MOTHER_WINDOW.0 -l "PROGRESS: $AGENT_NAME: [what's done] - [what's next]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.0 Enter
+tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "PROGRESS: $AGENT_NAME: [what's done] - [what's next]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
 ```
 
 When to report:
@@ -123,21 +123,21 @@ When to report:
 - Waiting for another agent
 - Task complete
 
-Report templates (use Bash tool to send to taco:$MOTHER_WINDOW.0):
+Report templates (use Bash tool to send to taco:$MOTHER_WINDOW.$MOTHER_PANE):
 
 PROGRESS UPDATE:
 ```bash
-tmux send-keys -t taco:$MOTHER_WINDOW.0 -l "PROGRESS: $AGENT_NAME: [specific accomplishment] - [next step or % done]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.0 Enter
+tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "PROGRESS: $AGENT_NAME: [specific accomplishment] - [next step or % done]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
 ```
 
 BUG FOUND & FIXED:
 ```bash
-tmux send-keys -t taco:$MOTHER_WINDOW.0 -l "BUG_FIXED: $AGENT_NAME: Found and fixed [bug description]. Impact: [scope]. No delay to timeline." && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.0 Enter
+tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "BUG_FIXED: $AGENT_NAME: Found and fixed [bug description]. Impact: [scope]. No delay to timeline." && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
 ```
 
 TASK COMPLETE:
 ```bash
-tmux send-keys -t taco:$MOTHER_WINDOW.0 -l "TASK_COMPLETE: $AGENT_NAME: [summary of deliverables and testing done]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.0 Enter
+tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "TASK_COMPLETE: $AGENT_NAME: [summary of deliverables and testing done]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
 ```
 
 AGENT-TO-AGENT COMMUNICATION (when Mother instructs you to coordinate):
@@ -147,7 +147,7 @@ tmux send-keys -t taco:X.Y -l "[$AGENT_NAME → AGENT_X]: [your message about co
 ```
 Note: Mother will provide you with the exact window:pane locations (e.g., taco:3.0, taco:3.1) when needed.
 
-Always copy Mother (taco:$MOTHER_WINDOW.0) on important cross-agent communications!
+Always copy Mother (taco:$MOTHER_WINDOW.$MOTHER_PANE) on important cross-agent communications!
 
 ═══════════════════════════════════════════════════════════════════════
 BEST PRACTICES
