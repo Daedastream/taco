@@ -16,6 +16,14 @@ QUICK_MODE=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/taco/templates"
 
+# Detect tmux base-index (user may have customized this)
+TMUX_BASE_INDEX=$(tmux show-option -g base-index 2>/dev/null | awk '{print $2}')
+TMUX_BASE_INDEX=${TMUX_BASE_INDEX:-0}  # Default to 0 if not set
+
+# Window numbers (adjusted for base-index)
+MOTHER_WINDOW=$TMUX_BASE_INDEX
+FIRST_AGENT_WINDOW=$((TMUX_BASE_INDEX + 3))
+
 # Questionnaire answers
 PROJECT_TYPE=""
 PROJECT_COMPLEXITY=""
@@ -453,12 +461,13 @@ create_agent_prompt() {
     AGENT_ROLE="$role" \
     DEPENDS_ON="$depends" \
     NOTIFIES="$notifies" \
+    MOTHER_WINDOW="$MOTHER_WINDOW" \
     envsubst < "$TEMPLATES_DIR/agent-prompt.txt"
 }
 
 # Wait for specification with beautiful progress
 wait_for_specification() {
-    local target="${SESSION_NAME}:0.0"
+    local target="${SESSION_NAME}:${MOTHER_WINDOW}.0"
     local spec_file="$PROJECT_DIR/.orchestrator/agent_spec.txt"
     local timeout=300  # Increased to 5 minutes
     local elapsed=0
@@ -680,7 +689,7 @@ create_agent_windows() {
     section_header "SPAWNING AGENTS"
 
     local total=${#AGENT_NAMES[@]}
-    local current_window=3
+    local current_window=$FIRST_AGENT_WINDOW
     local pane_in_window=0
 
     # Clear and rebuild location arrays with actual placements
@@ -763,7 +772,7 @@ create_agent_windows() {
 send_coordination_prompt() {
     section_header "ACTIVATING COORDINATION MODE"
 
-    local target="${SESSION_NAME}:0.0"
+    local target="${SESSION_NAME}:${MOTHER_WINDOW}.0"
 
     log INFO "Building agent roster..."
 
@@ -926,7 +935,7 @@ EOF
     tmux set-option -t "$SESSION_NAME" -w pane-active-border-style "fg=colour51"
 
     # Set Mother's pane title
-    tmux select-pane -t "${SESSION_NAME}:0.0" -T "MOTHER"
+    tmux select-pane -t "${SESSION_NAME}:${MOTHER_WINDOW}.0" -T "MOTHER"
 
     show_success "Session: ${BOLD}$SESSION_NAME${NC}"
 
@@ -934,7 +943,7 @@ EOF
     section_header "LAUNCHING MOTHER AGENT"
 
     log INFO "Starting Claude in Mother window..."
-    local target="${SESSION_NAME}:0.0"
+    local target="${SESSION_NAME}:${MOTHER_WINDOW}.0"
 
     # Always use default model (no flag = sonnet)
     tmux send-keys -t "$target" "claude --dangerously-skip-permissions" Enter
