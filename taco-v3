@@ -720,6 +720,9 @@ create_agent_windows() {
             local target="${SESSION_NAME}:${current_window}.$pane_in_window"
         fi
 
+        # Set pane title for visual identification
+        tmux select-pane -t "$target" -T "$name"
+
         # Start Claude
         tmux send-keys -t "$target" "claude --dangerously-skip-permissions" Enter
         sleep 3
@@ -908,6 +911,14 @@ EOF
     log INFO "Creating tmux session..."
     tmux has-session -t "$SESSION_NAME" 2>/dev/null && tmux kill-session -t "$SESSION_NAME"
     tmux new-session -d -s "$SESSION_NAME" -n "mother" -c "$PROJECT_DIR"
+
+    # Enable pane borders with titles for visual identification
+    tmux set-option -t "$SESSION_NAME" pane-border-status top
+    tmux set-option -t "$SESSION_NAME" pane-border-format "#{pane_index}: #{pane_title}"
+
+    # Set Mother's pane title
+    tmux select-pane -t "${SESSION_NAME}:0.0" -T "MOTHER"
+
     show_success "Session: ${BOLD}$SESSION_NAME${NC}"
 
     # Start Mother
