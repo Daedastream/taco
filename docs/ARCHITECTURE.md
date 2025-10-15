@@ -1,208 +1,271 @@
-# TACO Architecture
+# TACO Python Architecture
 
-## Overview
+## Core Principle
+**Tmux is the ONLY communication mechanism that works reliably with Claude.**
 
-TACO (Tmux Agent Command Orchestrator) is built as a modular system that orchestrates multiple Claude AI agents to work collaboratively on software projects. The architecture is designed for scalability, reliability, and ease of extension.
+All agent-to-agent and agent-to-Mother communication MUST use the 3-step tmux protocol:
+1. `tmux send-keys -t SESSION:WINDOW "message"`
+2. `sleep 0.2`
+3. `tmux send-keys -t SESSION:WINDOW Enter`
 
-## Core Components
-
-### 1. Module Structure
-
-TACO is split into several focused modules:
-
-- **taco-common.sh**: Core utilities, configuration, and logging
-- **taco-agents.sh**: Agent creation and prompt generation
-- **taco-pane-manager.sh**: Tmux window and pane management
-- **taco-registry.sh**: Connection registry and port management
-- **taco-messaging.sh**: Inter-agent communication
-- **taco-testing.sh**: Test coordination and monitoring
-- **taco-monitoring.sh**: Status display and state management
-- **taco-docker.sh**: Docker integration and compose generation
-
-### 2. Agent Hierarchy
+## Architecture Overview
 
 ```
-┌─────────────────┐
-│     Mother      │  (Window 0)
-│  (Orchestrator) │
-└────────┬────────┘
-         │ Creates & Coordinates
-         │
-    ┌────┴────┬─────────┬─────────┬─────────┐
-    │         │         │         │         │
-┌───▼───┐┌───▼───┐┌───▼───┐┌───▼───┐┌───▼───┐
-│Agent 1││Agent 2││Agent 3││Agent 4││Agent N│
-└───────┘└───────┘└───────┘└───────┘└───────┘
-  (Frontend)(Backend)(Database)(Testing)(DevOps)
+┌─────────────────────────────────────────────────────────────┐
+│                         Redis                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Command Queue│  │  Pub/Sub     │  │  State Store │      │
+│  │  (Streams)   │  │  (Monitor)   │  │   (Hashes)   │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+           ▲                    ▲                   ▲
+           │                    │                   │
+┌──────────┴────────────────────┴───────────────────┴─────────┐
+│                    TACO Orchestrator (Python)                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Spec Parser  │  │ Agent Manager│  │ Tmux Executor│      │
+│  │   (jq/JSON)  │  │  (asyncio)   │  │  (3-step)    │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└──────────────────────────────────────────────────────────────┘
+           │                    │                   │
+           ▼                    ▼                   ▼
+┌─────────────────────────────────────────────────────────────┐
+│                          Tmux Session                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Window 0 │  │ Window 1 │  │ Window 2 │  │ Window N │   │
+│  │  Mother  │  │ Monitor  │  │ Agent 1  │  │ Agent N  │   │
+│  │ (Claude) │  │ (Status) │  │ (Claude) │  │ (Claude) │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 3. Communication Flow
+## Data Flow
+
+### 1. Agent Specification Generation
+```
+User Input → Mother Prompt → Claude (Window 0)
+          ↓
+JSON Spec Output (between AGENT_SPEC_JSON_START/END markers)
+          ↓
+jq parser → Validated AgentSpec dataclass
+          ↓
+Redis state store (agents:* hashes)
+```
+
+### 2. Command Execution (Redis Stream → Tmux)
+```
+Agent needs to send message → Python enqueues to Redis Stream
+                            ↓
+Command: {
+  "type": "tmux_message",
+  "target": "taco:3",
+  "message": "[AGENT-4 → AGENT-3]: API ready",
+  "id": "cmd_12345"
+}
+                            ↓
+TmuxExecutor worker pulls from stream
+                            ↓
+Step 1: tmux send-keys -t taco:3 "[AGENT-4 → AGENT-3]: API ready"
+Step 2: sleep 0.2
+Step 3: tmux send-keys -t taco:3 Enter
+                            ↓
+Redis pub/sub: publish "commands:completed" cmd_12345
+```
+
+### 3. State Management
+```
+Redis Hashes:
+  - agents:{window} → {name, role, status, workspace}
+  - services:{name} → {port, url, health}
+  - session:state → {project_dir, started_at, agent_count}
+
+Redis Streams:
+  - commands:queue → pending tmux commands
+  - commands:completed → execution results
+  
+Redis Pub/Sub:
+  - monitor:events → real-time status updates
+```
+
+## Module Structure
 
 ```
-Agent A ──message──> Message Relay ──validate──> Agent B
-   │                      │                         │
-   └──update registry─────┼─────read registry──────┘
-                          │
-                    Logged to disk
+taco/
+├── pyproject.toml              # Poetry/pip dependencies
+├── src/
+│   └── taco/
+│       ├── __init__.py
+│       ├── __main__.py         # CLI entry point
+│       ├── models.py           # Dataclasses (AgentSpec, Command, etc)
+│       ├── parser.py           # JSON spec parsing with jq
+│       ├── orchestrator.py     # Main orchestration logic
+│       ├── tmux_executor.py    # 3-step tmux command execution
+│       ├── redis_queue.py      # Redis streams interface
+│       ├── agent_manager.py    # Agent lifecycle management
+│       └── monitoring.py       # Status dashboard generator
+├── tests/
+│   ├── test_parser.py
+│   ├── test_tmux_executor.py
+│   ├── test_redis_queue.py
+│   └── fixtures/
+│       └── sample_specs.json
+└── taco/                       # Keep bash for tmux setup only
+    ├── bin/taco               # Wrapper: calls python -m taco
+    └── lib/
+        └── taco-tmux.sh       # Pure tmux session management
 ```
 
 ## Key Design Decisions
 
-### 1. Tmux-based Architecture
+### Why Redis?
+- **Reliable message queue**: Streams provide at-least-once delivery
+- **Atomic operations**: Prevents race conditions in port allocation
+- **Pub/Sub monitoring**: Real-time status updates without polling
+- **Fast**: In-memory, <1ms command enqueue/dequeue
+- **Simple**: Single dependency, runs locally
 
-**Why Tmux?**
-- Native terminal multiplexing
-- Persistent sessions
-- Easy navigation between agents
-- Visual monitoring of all agents
-- No additional dependencies
+### Why Keep Tmux Communication?
+- **Only reliable method**: Direct stdin to Claude's REPL
+- **Visual monitoring**: See all agents working in real-time
+- **Session persistence**: Detach/reattach without losing state
+- **No API dependency**: Works offline, no rate limits
 
-### 2. File-based Communication
+### Why Python?
+- **Type safety**: Dataclasses catch bugs at dev time
+- **Async/await**: Natural fit for coordinating N agents
+- **Testing**: pytest >>> bash test harness
+- **Parsing**: JSON via jq subprocess, not bash regex hell
+- **Maintainability**: 1,500 lines Python vs 6,800 lines bash
 
-**Advantages:**
-- Simple and reliable
-- Easy to debug
-- Persistent message history
-- No network dependencies
-- Works across system restarts
+## Command Protocol
 
-### 3. Modular Shell Scripts
-
-**Benefits:**
-- Easy to understand and modify
-- No compilation required
-- Portable across Unix systems
-- Can be sourced individually
-- Simple testing
-
-## Data Flow
-
-### 1. Initialization
-
-```
-User Input → Mother Prompt → Agent Specification → Agent Creation → Agent Initialization
+### Mandatory 3-Step Execution
+```python
+async def execute_tmux_command(target: str, message: str) -> None:
+    """NEVER modify this - it's the only reliable way to send to Claude."""
+    await run_command(["tmux", "send-keys", "-t", target, message])
+    await asyncio.sleep(0.2)
+    await run_command(["tmux", "send-keys", "-t", target, "Enter"])
 ```
 
-### 2. Runtime Communication
-
-```
-Agent Work → Test Execution → Result Reporting → Mother Coordination → Next Tasks
-```
-
-### 3. Service Discovery
-
-```
-Agent Starts Service → Allocate Port → Update Registry → Other Agents Discover → Connect
-```
-
-## State Management
-
-### 1. Persistent State
-
-- **state.json**: Session configuration and agent list
-- **connections.json**: Service registry and port mappings
-- ***.log files**: Append-only logs for debugging
-
-### 2. Runtime State
-
-- Tmux session state
-- Agent process states
-- Environment variables
-- File system workspace
-
-## Security Considerations
-
-### 1. Process Isolation
-
-- Each agent runs in its own tmux pane
-- Workspace isolation by directory
-- No shared memory between agents
-
-### 2. Port Management
-
-- Automatic port allocation prevents conflicts
-- Registry prevents duplicate services
-- Validation ensures services are accessible
-
-### 3. Command Injection Prevention
-
-- All user input is properly escaped
-- File paths are validated
-- Commands use arrays instead of string concatenation
-
-## Extension Points
-
-### 1. Adding New Modules
-
-Create a new module in `lib/` and source it in the main script:
-```bash
-source "$TACO_HOME/lib/taco-mymodule.sh"
+### Redis Stream Format
+```json
+{
+  "id": "1234567890-0",
+  "type": "tmux_message",
+  "target": "taco:3.0",
+  "message": "[AGENT-4 → AGENT-3]: Database schema ready",
+  "priority": "normal",
+  "timestamp": "2025-01-09T12:34:56Z",
+  "retry_count": 0
+}
 ```
 
-### 2. Custom Agent Types
+### Queue Guarantees
+- Commands processed in FIFO order per agent
+- Failed commands retry with exponential backoff (max 3 attempts)
+- Dead letter queue for permanently failed commands
+- Command execution logged to Redis for debugging
 
-Modify `create_mother_prompt()` to include new agent types in specifications.
+## Migration Strategy
 
-### 3. Additional Communication Channels
+### Phase 1: Python Core (Keep Bash Wrapper)
+- ✅ Delete unused bash code
+- Python modules for parsing, Redis, tmux execution
+- Bash `taco` wrapper calls `python -m taco`
+- Run pytest suite before each commit
 
-Extend `message_relay.sh` to support new communication methods.
+### Phase 2: Full Python
+- Replace bash main() with Python CLI
+- Remove taco/lib/*.sh except tmux-specific helpers
+- Performance testing: startup time, message latency
 
-### 4. New Testing Frameworks
+### Phase 3: Production Hardening
+- Error recovery: handle Redis/tmux crashes
+- Monitoring dashboard: web UI (optional)
+- Load testing: 20+ agents, 1000+ commands/min
 
-Add cases to `test_coordinator.sh` for different test runners.
+## Performance Targets
 
-## Performance Considerations
+- Session startup: <5s (currently 15s+)
+- Command enqueue: <1ms
+- Command execution: ~200ms (tmux overhead)
+- Parsing 10 agents: <100ms
+- Memory per agent: <50MB Python process
 
-### 1. Scalability
+## Testing Strategy
 
-- Supports 2-15 agents efficiently
-- File-based communication scales linearly
-- Tmux handles window management efficiently
+```python
+# tests/test_tmux_executor.py
+@pytest.mark.asyncio
+async def test_three_step_protocol():
+    """Verify tmux commands use mandatory 3-step protocol."""
+    executor = TmuxExecutor()
+    
+    with patch('taco.tmux_executor.run_command') as mock:
+        await executor.send_message("taco:3", "test message")
+        
+        assert mock.call_count == 3
+        assert mock.call_args_list[0][0][0] == ["tmux", "send-keys", "-t", "taco:3", "test message"]
+        assert mock.call_args_list[2][0][0] == ["tmux", "send-keys", "-t", "taco:3", "Enter"]
 
-### 2. Resource Usage
+# tests/test_parser.py
+def test_json_spec_parsing():
+    """Parse JSON agent spec from Mother output."""
+    spec_file = "fixtures/mother_output.txt"
+    agents = parse_agent_spec(spec_file)
+    
+    assert len(agents) == 5
+    assert agents[0].name == "frontend_dev"
+    assert agents[0].window == 3
+    assert "validator" in agents[0].notifies
+```
 
-- Minimal CPU overhead (shell scripts)
-- Memory usage proportional to agent count
-- Disk usage for logs and state files
+## Security
 
-### 3. Bottlenecks
+- Redis: localhost only, no auth needed (local dev)
+- Tmux: session isolation via named sessions
+- Input sanitization: escape special chars in messages
+- No eval(): Use subprocess.run() with arg arrays
 
-- Mother agent can become a coordination bottleneck
-- File system I/O for large projects
-- Terminal rendering for many panes
+## Observability
 
-## Error Handling
+### Logs
+```python
+logger.info("agent.created", agent=name, window=window)
+logger.error("tmux.failed", cmd=cmd, error=err, retry=count)
+```
 
-### 1. Failure Detection
+### Metrics (Redis counters)
+- `commands:enqueued:total`
+- `commands:executed:total`
+- `commands:failed:total`
+- `agents:active:count`
 
-- Health checks via connection validation
-- Test failure detection and routing
-- Build error monitoring
+### Monitoring Dashboard
+Real-time tmux window (Window 1):
+```
+═══════════════════════════════════════════════════════════════
+  TACO Orchestration Monitor
+═══════════════════════════════════════════════════════════════
+  Session: taco-project-20250109
+  Started: 2h 34m ago
+  Agents: 7 active, 0 failed
 
-### 2. Recovery Mechanisms
+  Command Queue:
+    Pending: 3
+    Processing: 2
+    Completed: 1,247
+    Failed: 0
 
-- Automatic retry with backoff
-- Fallback communication methods
-- State restoration from disk
+  Recent Activity:
+    12:34:56 [AGENT-3 → AGENT-4] API spec shared
+    12:34:55 [AGENT-5 → MOTHER] Tests passing (42/42)
+    12:34:52 [AGENT-6 → AGENT-3] Frontend build complete
 
-### 3. Debugging Support
-
-- Comprehensive logging at multiple levels
-- Message history preservation
-- State inspection tools
-
-## Future Enhancements
-
-### 1. Planned Features
-
-- Web UI for monitoring
-- Cloud deployment support
-- Multi-project orchestration
-- Agent templates
-
-### 2. Architecture Evolution
-
-- Plugin system for extensions
-- Remote agent support
-- Advanced scheduling algorithms
-- Machine learning for agent optimization
+  Service Registry:
+    frontend: http://localhost:3000 (healthy)
+    backend:  http://localhost:3001 (healthy)
+    database: http://localhost:5432 (healthy)
+═══════════════════════════════════════════════════════════════
+```

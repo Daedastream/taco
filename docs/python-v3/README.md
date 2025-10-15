@@ -1,31 +1,3 @@
-Metadata-Version: 2.4
-Name: taco-orchestrator
-Version: 3.0.0
-Summary: Tmux Agent Command Orchestrator - Multi-agent AI development with Claude
-Author: TACO Contributors
-License: MIT
-Keywords: ai,agents,tmux,orchestration,claude,development
-Classifier: Development Status :: 4 - Beta
-Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.11
-Classifier: Programming Language :: Python :: 3.12
-Requires-Python: >=3.11
-Description-Content-Type: text/markdown
-License-File: LICENSE
-Requires-Dist: redis>=5.0.0
-Requires-Dist: pydantic>=2.5.0
-Requires-Dist: asyncio-mqtt>=0.16.0
-Provides-Extra: dev
-Requires-Dist: pytest>=7.4.0; extra == "dev"
-Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
-Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
-Requires-Dist: black>=23.0.0; extra == "dev"
-Requires-Dist: ruff>=0.1.0; extra == "dev"
-Requires-Dist: mypy>=1.7.0; extra == "dev"
-Dynamic: license-file
-
 # 🌮 TACO v3.0 - Tmux Agent Command Orchestrator
 
 **Multi-agent AI orchestration with Claude, powered by Python + Redis + Tmux**
