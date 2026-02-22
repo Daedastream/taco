@@ -4,7 +4,13 @@
 
 set -euo pipefail
 
-VERSION="3.0.0"
+# Cleanup on exit
+cleanup() {
+    rm -f /tmp/coord_prompt.txt 2>/dev/null || true
+}
+trap cleanup EXIT
+
+VERSION="1.0.0"
 SESSION_NAME="taco"
 CLAUDE_MODEL="sonnet"  # Always use sonnet
 PROJECT_PROMPT=""
@@ -14,20 +20,14 @@ USE_NEW_DIR=true
 DEBUG=false
 QUICK_MODE=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEMPLATES_DIR="$SCRIPT_DIR/taco/templates"
+TEMPLATES_DIR="$SCRIPT_DIR/templates"
 
-# Detect tmux base-index (user may have customized this)
-TMUX_BASE_INDEX=$(tmux show-option -g base-index 2>/dev/null | awk '{print $2}')
-TMUX_BASE_INDEX=${TMUX_BASE_INDEX:-0}  # Default to 0 if not set
-
-# Detect tmux pane-base-index (user may have customized this)
-TMUX_PANE_BASE_INDEX=$(tmux show-option -g pane-base-index 2>/dev/null | awk '{print $2}')
-TMUX_PANE_BASE_INDEX=${TMUX_PANE_BASE_INDEX:-0}  # Default to 0 if not set
-
-# Window numbers (adjusted for base-index)
-MOTHER_WINDOW=$TMUX_BASE_INDEX
-MOTHER_PANE=$TMUX_PANE_BASE_INDEX
-FIRST_AGENT_WINDOW=$((TMUX_BASE_INDEX + 3))
+# Window/pane indices - will be detected after session creation
+TMUX_BASE_INDEX=0
+TMUX_PANE_BASE_INDEX=0
+MOTHER_WINDOW=0
+MOTHER_PANE=0
+FIRST_AGENT_WINDOW=3
 
 # Questionnaire answers
 PROJECT_TYPE=""
@@ -52,12 +52,8 @@ NC='\033[0m'
 declare -a AGENTS
 declare -a AGENT_NAMES
 declare -a AGENT_WINDOWS
+declare -a AGENT_PANES
 declare -a AGENT_ROLES
-
-# Questionnaire answers
-PROJECT_TYPE=""
-PROJECT_COMPLEXITY=""
-AGENT_COUNT="auto"
 
 # Beautiful ASCII TACO logo with burgundy gradient
 show_taco_logo() {
@@ -90,7 +86,7 @@ spinner() {
     local message=$2
     local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
-    while kill -0 $pid 2>/dev/null; do
+    while kill -0 "$pid" 2>/dev/null; do
         local temp=${spinstr#?}
         printf " ${CYAN}%c${NC}  %s" "$spinstr" "$message"
         local spinstr=$temp${spinstr%"$temp"}
@@ -163,7 +159,7 @@ check_dependencies() {
     for dep in "${deps[@]}"; do
         current=$((current + 1))
         if command -v "$dep" >/dev/null 2>&1; then
-            show_success "${BOLD}$dep${NC} is installed $(command -v $dep)"
+            show_success "${BOLD}$dep${NC} is installed $(command -v "$dep")"
         else
             show_warn "${BOLD}$dep${NC} is ${RED}missing${NC}"
             missing+=("$dep")
@@ -471,6 +467,132 @@ create_agent_prompt() {
     envsubst < "$TEMPLATES_DIR/agent-prompt.txt"
 }
 
+# Create CLAUDE.md for agent initialization
+create_agent_claude_md() {
+    local name="$1"
+    local window="$2"
+    local pane="$3"
+    local role="$4"
+    local depends="$5"
+    local notifies="$6"
+    local project_dir="$7"
+
+    # Create .claude directory
+    mkdir -p "$project_dir/.claude"
+
+    # Generate CLAUDE.md with agent-specific instructions
+    cat > "$project_dir/.claude/CLAUDE.md" << EOF
+# TACO Agent: $name
+
+You are a specialized development agent in the TACO multi-agent system where multiple Claude instances work in parallel across tmux windows to build complex projects efficiently.
+
+## Your Identity
+
+- **Agent Name**: $name
+- **Tmux Location**: window $window, pane $pane (taco:$window.$pane)
+- **Core Responsibility**: $role
+- **Depends On**: $depends
+- **Notifies When Done**: $notifies
+
+## Your Role
+
+$role
+
+## Operational Protocol
+
+### Phase 1: Await Task Assignment
+- Mother (window $MOTHER_WINDOW) will send you a detailed task specification
+- Task messages are prefixed: [MOTHER → $name]
+- Your task will include:
+  * Complete project specification (architecture, tech stack, conventions)
+  * Technical details (ports, API routes, file structure, shared types)
+  * Your specific deliverables and acceptance criteria
+  * Context about other agents' responsibilities
+  * Error escalation protocol
+  * Communication patterns with other agents
+
+### Phase 2: Execute Your Task
+- Use ALL available Claude Code tools (read, write, execute, test)
+- Stay within YOUR domain: $role
+- Follow project conventions specified by Mother
+- Write clean, production-quality code
+- Document complex logic and design decisions
+- Test your work incrementally as you build
+
+### Phase 3: Handle Issues Autonomously
+
+**A) Problem is within your domain:**
+- Fix it yourself (you're capable!)
+- If it causes delays, inform Mother:
+  \`\`\`bash
+  tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "DELAY_REPORT: $name: [reason] - [estimated time]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
+  \`\`\`
+
+**B) Problem is outside your domain:**
+- DO NOT attempt to fix (stay in your lane)
+- Report to Mother immediately:
+  \`\`\`bash
+  tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "ERROR_REPORT: $name: [problem] - [which agent's domain] - [blocking: YES/NO]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
+  \`\`\`
+
+**C) Problem is systemic:**
+- Report to Mother with recommendation:
+  \`\`\`bash
+  tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "SYSTEMIC_ISSUE: $name: [problem] - [impact] - [solution]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
+  \`\`\`
+
+### Phase 4: Communicate Progress (CRITICAL!)
+
+⚠️ Send status updates to Mother's window using the Bash tool:
+
+\`\`\`bash
+tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "PROGRESS: $name: [what's done] - [what's next]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
+\`\`\`
+
+Report when:
+- Major milestone reached
+- Starting a complex/risky task
+- Every 30-45 minutes of work
+- Waiting on dependencies
+- Encountering blockers
+
+### Phase 5: Completion
+
+When your work is complete:
+
+\`\`\`bash
+tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE -l "COMPLETE: $name: [summary of deliverables] - [location of key files] - [any notes for dependent agents]" && sleep 0.2 && tmux send-keys -t taco:$MOTHER_WINDOW.$MOTHER_PANE Enter
+\`\`\`
+
+## Communication Protocols
+
+### Send Message to Another Agent
+\`\`\`bash
+tmux send-keys -t taco:TARGET_WINDOW.TARGET_PANE -l "[$name → target_agent]: your message" && sleep 0.2 && tmux send-keys -t taco:TARGET_WINDOW.TARGET_PANE Enter
+\`\`\`
+
+### Key Reminders
+- Always use the Bash tool to send tmux messages
+- Use \`-l\` flag with send-keys (literal mode)
+- Include sleep 0.2 between send-keys commands
+- Message format: [SENDER → RECEIVER]: content
+- Stay in your domain - don't do other agents' work
+- Proactive communication is essential
+
+## Project Context
+
+- **Working Directory**: $project_dir
+- **Session Name**: taco
+- **Mother Window**: $MOTHER_WINDOW.$MOTHER_PANE
+
+---
+
+**Remember**: You are part of a coordinated system. Focus on your domain, communicate proactively, and trust other agents to handle their domains.
+EOF
+
+    log SUCCESS "Created .claude/CLAUDE.md for ${BOLD}$name${NC}"
+}
+
 # Wait for specification with beautiful progress
 wait_for_specification() {
     local target="${SESSION_NAME}:${MOTHER_WINDOW}.${MOTHER_PANE}"
@@ -670,7 +792,7 @@ ask_window_layout() {
     echo -e "  ${BOLD}5)${NC} ${CYAN}5 panes per window${NC}"
     echo -e "  ${BOLD}6)${NC} ${CYAN}6 panes per window${NC} ${DIM}(2x3 or 3x2 grid)${NC}"
     echo
-    echo -e "${DIM}Note: Mother always has window 0 alone${NC}"
+    echo -e "${DIM}Note: Mother always has its own window${NC}"
     echo
 
     read -r -p "$(echo -e ${YELLOW}❯${NC} Choose [1-6, default 1]: )" layout_choice
@@ -746,7 +868,10 @@ create_agent_windows() {
         # Set pane title for visual identification
         tmux select-pane -t "$target" -T "$name"
 
-        # Start Claude
+        # Create CLAUDE.md for this agent
+        create_agent_claude_md "$name" "$current_window" "$current_pane" "$role" "none" "none" "$PROJECT_DIR"
+
+        # Start Claude (will auto-load .claude/CLAUDE.md)
         tmux send-keys -t "$target" "claude --dangerously-skip-permissions" Enter
         sleep 3
 
@@ -754,12 +879,8 @@ create_agent_windows() {
         tmux send-keys -t "$target" "1" Enter
         sleep 1
 
-        # Send agent prompt with correct window:pane location
-        local prompt=$(create_agent_prompt "$name" "$current_window" "$pane_in_window" "$role" "none" "none")
-        printf '%s' "$prompt" | tmux load-buffer -
-        tmux paste-buffer -t "$target"
-        sleep 0.3
-        tmux send-keys -t "$target" Enter
+        # Send simple start message
+        tmux send-keys -t "$target" "I'm ready. Awaiting task assignment from Mother." Enter
 
         show_success "Agent ${BOLD}$name${NC} is ready"
 
@@ -865,7 +986,7 @@ main() {
                 shift 2
                 ;;
             -v|--version)
-                echo "TACO v$VERSION (Bash Edition)"
+                echo "TACO v$VERSION"
                 exit 0
                 ;;
             -h|--help)
@@ -938,11 +1059,22 @@ EOF
     tmux has-session -t "$SESSION_NAME" 2>/dev/null && tmux kill-session -t "$SESSION_NAME"
     tmux new-session -d -s "$SESSION_NAME" -n "mother" -c "$PROJECT_DIR"
 
+    # Now detect the actual base-index from the session (after config is loaded)
+    TMUX_BASE_INDEX=$(tmux show-option -g -t "$SESSION_NAME" base-index 2>/dev/null | awk '{print $2}' || echo "1")
+    TMUX_BASE_INDEX=${TMUX_BASE_INDEX:-1}  # Default to 1 (common convention)
+    TMUX_PANE_BASE_INDEX=$(tmux show-option -g -t "$SESSION_NAME" pane-base-index 2>/dev/null | awk '{print $2}' || echo "1")
+    TMUX_PANE_BASE_INDEX=${TMUX_PANE_BASE_INDEX:-1}  # Default to 1
+
+    # Update window/pane numbers based on detected indices
+    MOTHER_WINDOW=$TMUX_BASE_INDEX
+    MOTHER_PANE=$TMUX_PANE_BASE_INDEX
+    FIRST_AGENT_WINDOW=$((TMUX_BASE_INDEX + 3))
+
     # Enable pane borders with titles for visual identification
-    tmux set-option -t "$SESSION_NAME" -w pane-border-status top
-    tmux set-option -t "$SESSION_NAME" -w pane-border-format "#[fg=cyan,bold]#{pane_index}:#[fg=green] #{pane_title}"
-    tmux set-option -t "$SESSION_NAME" -w pane-border-style "fg=colour240"
-    tmux set-option -t "$SESSION_NAME" -w pane-active-border-style "fg=colour51"
+    tmux set-option -t "$SESSION_NAME:$MOTHER_WINDOW" pane-border-status top
+    tmux set-option -t "$SESSION_NAME:$MOTHER_WINDOW" pane-border-format "#[fg=cyan,bold]#{pane_index}:#[fg=green] #{pane_title}"
+    tmux set-option -t "$SESSION_NAME:$MOTHER_WINDOW" pane-border-style "fg=colour240"
+    tmux set-option -t "$SESSION_NAME:$MOTHER_WINDOW" pane-active-border-style "fg=colour51"
 
     # Set Mother's pane title
     tmux select-pane -t "${SESSION_NAME}:${MOTHER_WINDOW}.${MOTHER_PANE}" -T "MOTHER"
@@ -993,7 +1125,7 @@ EOF
     sleep 2
     launch_sequence
 
-    tmux attach -t "${SESSION_NAME}:0"
+    tmux attach -t "${SESSION_NAME}:${MOTHER_WINDOW}"
 }
 
 main "$@"
