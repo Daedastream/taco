@@ -49,19 +49,28 @@ apt-get install tmux jq gettext-base
 ## Usage
 
 ```bash
-# Clone and run
+# Clone and install
 git clone https://github.com/lxsiii/taco.git
 cd taco
-./taco
+./install.sh
 
-# Or with a direct prompt
-./taco -p "Build a chat app with WebSockets"
+# Interactive mode
+taco
+
+# Direct prompt
+taco -p "Build a chat app with WebSockets"
 
 # Quick mode (skip questionnaire)
-./taco -q
+taco -q
 
 # From a file
-./taco -f project-description.txt
+taco -f project-description.txt
+
+# Run in background (headless)
+taco -p "Build an API" --headless
+
+# Check on a running session
+taco --status
 ```
 
 ## How it works
@@ -77,7 +86,8 @@ The entire coordination protocol runs through `tmux send-keys` — no servers, n
 ## Files
 
 ```
-taco                              # the whole thing (1,131 lines of bash)
+taco                              # the whole thing (~1,200 lines of bash)
+install.sh                        # symlinks taco to /usr/local/bin
 templates/
   mother-prompt.txt               # orchestrator behavior & agent design
   agent-prompt.txt                # worker agent operational protocol
