@@ -806,8 +806,8 @@ wait_for_claude_ready() {
     while [ $elapsed -lt $timeout ]; do
         local content
         content=$(tmux capture-pane -t "$target" -p -S -5 2>/dev/null || true)
-        # Claude Code shows ❯ or > when ready for input
-        if echo "$content" | grep -qE "^❯|^>"; then
+        # Claude Code shows "bypass permissions" status bar when ready
+        if echo "$content" | grep -qE "bypass permissions|❯|^>"; then
             sleep 0.5  # Let prompt fully render
             return 0
         fi
