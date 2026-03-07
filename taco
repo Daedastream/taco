@@ -798,21 +798,23 @@ ask_window_layout() {
     show_success "Layout: ${BOLD}$PANES_PER_WINDOW panes per window${NC} ${DIM}(~$num_windows windows total)${NC}"
 }
 
-# Poll tmux pane for trust prompt before sending response
-wait_for_trust_prompt() {
+# Wait for Claude to be ready (input prompt visible)
+wait_for_claude_ready() {
     local target="$1"
     local timeout=30
     local elapsed=0
     while [ $elapsed -lt $timeout ]; do
         local content
         content=$(tmux capture-pane -t "$target" -p -S -5 2>/dev/null || true)
-        if echo "$content" | grep -qiE "(trust|permission|allow|dangerously)"; then
+        # Claude Code shows ❯ or > when ready for input
+        if echo "$content" | grep -qE "^❯|^>"; then
+            sleep 0.5  # Let prompt fully render
             return 0
         fi
         sleep 1
         elapsed=$((elapsed + 1))
     done
-    log WARN "Trust prompt not detected after ${timeout}s, proceeding anyway"
+    log WARN "Claude prompt not detected after ${timeout}s, proceeding anyway"
 }
 
 # Create agent windows with beautiful progress
@@ -894,10 +896,8 @@ create_agent_windows() {
         local agent_md="$PROJECT_DIR/.claude/agents/CLAUDE-${name}.md"
         tmux send-keys -t "$target" "claude --dangerously-skip-permissions --system-prompt \"\$(cat '$agent_md')\"" Enter
 
-        # Poll for trust prompt before accepting
-        wait_for_trust_prompt "$target"
-        tmux send-keys -t "$target" "1" Enter
-        sleep 1
+        # Wait for Claude to be ready
+        wait_for_claude_ready "$target"
 
         # Send simple start message
         tmux send-keys -t "$target" "I'm ready. Awaiting task assignment from Mother." Enter
@@ -1148,10 +1148,8 @@ EOF
     sleep 0.5
     tmux send-keys -t "$target" "claude --dangerously-skip-permissions" Enter
 
-    log INFO "Waiting for security prompt..."
-    wait_for_trust_prompt "$target"
-    tmux send-keys -t "$target" "1" Enter
-    sleep 2
+    log INFO "Waiting for Claude to start..."
+    wait_for_claude_ready "$target"
 
     log INFO "Transmitting project requirements..."
     local mother_prompt=$(create_mother_prompt "$PROJECT_PROMPT")
