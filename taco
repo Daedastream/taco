@@ -19,7 +19,13 @@ PROJECT_NAME=""
 USE_NEW_DIR=true
 DEBUG=false
 QUICK_MODE=false
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+    DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/templates"
 
 # Window/pane indices - will be detected after session creation
@@ -75,7 +81,7 @@ show_taco_logo() {
     echo -e "${BURG4}       ╚═╝    ╚═╝  ╚═╝  ╚═════╝  ╚═════╝ ${NC}"
     echo
     echo -e "${BURG2}           Tmux Agent Command Orchestrator${NC}"
-    echo -e "${DIM}                Made by Daedastream LLC${NC}"
+    echo -e "${DIM}                TACO${NC}"
     echo
     echo
 }

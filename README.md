@@ -50,7 +50,7 @@ apt-get install tmux jq gettext-base
 
 ```bash
 # Clone and run
-git clone https://github.com/Daedastream/taco.git
+git clone https://github.com/lxsiii/taco.git
 cd taco
 ./taco
 
@@ -86,4 +86,4 @@ templates/
 
 ## License
 
-MIT — Daedastream LLC
+MIT
