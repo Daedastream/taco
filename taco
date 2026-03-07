@@ -211,10 +211,16 @@ check_dependencies() {
     if [ ${#missing[@]} -gt 0 ]; then
         echo
         echo -e "${RED}${BOLD}✗ Missing dependencies:${NC} ${missing[*]}"
-        echo -e "${YELLOW}Install with:${NC} ${BOLD}brew install ${missing[*]}${NC}"
-        # envsubst is part of gettext on macOS
-        if [[ " ${missing[*]} " == *" envsubst "* ]]; then
-            echo -e "${DIM}  (envsubst is part of gettext: brew install gettext && brew link --force gettext)${NC}"
+        if [[ -f /etc/debian_version ]] || grep -qi microsoft /proc/version 2>/dev/null; then
+            echo -e "${YELLOW}Install with:${NC} ${BOLD}sudo apt install ${missing[*]}${NC}"
+            if [[ " ${missing[*]} " == *" envsubst "* ]]; then
+                echo -e "${DIM}  (envsubst is part of gettext: sudo apt install gettext)${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Install with:${NC} ${BOLD}brew install ${missing[*]}${NC}"
+            if [[ " ${missing[*]} " == *" envsubst "* ]]; then
+                echo -e "${DIM}  (envsubst is part of gettext: brew install gettext && brew link --force gettext)${NC}"
+            fi
         fi
         exit 1
     fi
