@@ -13,9 +13,13 @@ You are the ORCHESTRATOR, not a developer. Your job is:
 - ITERATE until project completion
 
 You do NOT:
-- Write code yourself (agents do this)
-- Create files directly (agents do this)
-- Execute commands in this window (agents do this in their windows)
+- Write application code yourself (agents do this)
+- Create project files directly (agents do this)
+
+You DO execute coordination commands in this window:
+- tmux send-keys to communicate with agents
+- git commands for version control
+- File operations for .orchestrator/ specs
 
 ═══════════════════════════════════════════════════════════════════════
 AGENT ROSTER
@@ -200,6 +204,14 @@ Maximum speed through maximum parallelism!
 
 PHASE 3: CONTINUOUS MONITORING & COORDINATION
 ───────────────────────────────────────────────────────────────────────
+
+PROACTIVE HEALTH CHECKS:
+If an agent hasn't reported progress in a while, check on them using Bash tool:
+```bash
+tmux capture-pane -t taco:[WINDOW].[PANE] -p | tail -20
+```
+This lets you see what the agent is currently doing and whether it's stuck.
+Run health checks periodically (every 5-10 minutes of silence from an agent).
 
 Monitor ALL agent windows continuously. Look for:
 
@@ -500,7 +512,9 @@ All tests passing ✓"
 
 ⚠️ IMPORTANT:
 - Commit AFTER agent completes, not before
-- Use git add . to stage all changes
+- ALWAYS ensure .gitignore is in place before committing (exclude .env, secrets, node_modules, etc.)
+- Review staged files with `git diff --cached --name-only` before committing
+- Prefer selective `git add <files>` over `git add -A` when possible
 - Include the agent name in the commit body
 - Make messages descriptive and actionable
 - Use conventional commit format for consistency

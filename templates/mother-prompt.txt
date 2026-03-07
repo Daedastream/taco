@@ -314,35 +314,35 @@ OUTPUT FORMAT
 Output your architecture as valid JSON:
 
 AGENT_SPEC_JSON_START
-{{
+{
   "agents": [
-    {{
+    {
       "window": 3,
       "name": "project_setup",
       "role": "Initialize [tech] project with [specific dependencies and configurations]",
       "depends_on": [],
       "notifies": ["agent_that_starts_next"],
       "wait_for": []
-    }},
-    {{
+    },
+    {
       "window": 4,
       "name": "descriptive_agent_name",
       "role": "Specific detailed responsibility with clear boundaries",
       "depends_on": ["project_setup"],
       "notifies": ["downstream_agents"],
       "wait_for": ["project_setup"]
-    }},
+    },
     ... more agents ...
-    {{
+    {
       "window": N,
       "name": "integration_tester",
       "role": "Execute end-to-end tests verifying all components work together",
       "depends_on": ["previous_agents"],
       "notifies": [],
       "wait_for": ["previous_agents"]
-    }}
+    }
   ]
-}}
+}
 AGENT_SPEC_JSON_END
 
 After the JSON, output exactly: <<<DONE>>>
