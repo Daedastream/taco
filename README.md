@@ -1,4 +1,4 @@
-# TACO
+# 🌮 TACO
 
 **Tmux Agent Command Orchestrator** — multi-agent AI orchestration in pure bash.
 
